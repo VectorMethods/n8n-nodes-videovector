@@ -11,26 +11,30 @@ manual npm publication are outside this release path.
 1. Merge the reviewed private integration and its publication controls into the
    private control repository's protected `main`. Its exact push revision must
    pass **Required CI** before the owner can approve a public operation.
-2. Provision `VectorMethods/n8n-nodes-videovector` as a public company repository
-   through the organization’s company-identity bootstrap process. A company-owned
-   initial `main` must exist before a routine PR or protected-main replacement.
-   Install `vectormethods-public-bot` on the new repository identity. The existing
-   reset command requires an existing repository and is not a new-repository
-   creation shortcut.
-3. In the private control repository's protected `public-repo-bot` environment,
+2. In the private control repository's protected `public-repo-bot` environment,
    configure `PUBLIC_SOURCE_REPO_N8N=VectorMethods/Playground_backend` and
    `PUBLIC_SOURCE_SUBDIR_N8N=n8n`. The same-repository source uses the workflow's
    read token. A source in another private repository needs `PUBLIC_SOURCE_READ_TOKEN`.
+3. Dispatch Public Repo Bot with `repo=n8n-nodes-videovector`, `mode=bootstrap`,
+   `source_location=configured`, the reviewed source revision, `target_ref=main`,
+   an empty operation payload, and `force=false`. This mode requires the target
+   repository to be absent and binds that precondition, company identity,
+   exact scanned source, and canonical governance to the owner approval digest.
 4. Retain the existing App client ID, App ID, private key, and private identity
-   admission pattern in the protected environment. Apply and verify the bot's
-   repository governance: required **Node checks** and **Secret scan** checks,
-   protected `main`, create-only `videovector-n8n-v*` tag rules with the reviewed
-   App as the sole bypass actor, enabled Actions/release workflow, and immutable
-   GitHub Releases.
-5. Publish the sanitized package tree through the reviewed bot operation. A
-   first source replacement with unrelated history uses the separately approved
-   `direct-sync` mode and its exact preimage digest; routine updates use `pr`.
-   Never force-push the private monorepo directly to the public repository.
+   admission pattern in the protected environment. After approval, the App creates
+   a private company repository with no generated commit. GitHub automatically
+   grants the creating installation access. A new token scoped to that repository
+   installs the sanitized initial `main`, applies required **Node checks** and
+   **Secret scan**, protected `main`, create-only `videovector-n8n-v*` tag rules,
+   enabled Actions/release workflow, and immutable Releases, then makes it public.
+   Every token is revoked after use. The receipt records the new repository ID.
+5. Record that repository ID in the control plane's pinned repository identities
+   before routine `pr`/`merge` updates. Bootstrap refuses existing targets,
+   including a partially completed bootstrap: preserve its receipt and reconcile
+   its exact repository ID and candidate before approving recovery. The existing
+   reset operation is not a bootstrap or recovery shortcut. Routine updates use
+   the reviewed `pr` and `merge` operations; never push the private monorepo to the
+   public repository.
 
 Every mutating bot operation first prepares and scans its concrete candidate.
 The owner then approves the exact operation digest in the private control
