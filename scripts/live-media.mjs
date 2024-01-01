@@ -65,6 +65,8 @@ async function template(file, name) {
  for (const node of definition.nodes) if (node.type.startsWith('@vectormethods/n8n-nodes-videovector.')) {
   node.credentials = { videoVectorApi: { id: credential.id, name: credential.name } };
  }
+ const process = definition.nodes.find((node) => node.name === 'Start Run');
+ Object.assign(process.parameters, { target: 'index', indexId: id(state.indexId) });
  return definition;
 }
 async function independentReads() {
@@ -84,10 +86,20 @@ async function prepare() {
  if (state.indexId) await one('Read dedicated index', { resource: 'index', operation: 'get', indexId: id(state.indexId) });
  if (state.promptId) await one('Read saved prompt', { resource: 'prompt', operation: 'get', promptId: id(state.promptId) });
  if (!state.indexId || !state.promptId) return missing('Upload and process template', 'Dedicated index or saved prompt creation failed; independent reads were still exercised');
+ await prepareBinary();
+}
+async function prepareBinary(reuseUploaded = false) {
+ assert(state.indexId && state.promptId, 'Dedicated index and prompt must exist before prepare-binary');
  const definition = await template('native-upload-process-results.json', 'Binary upload, process and restart');
  const upload = definition.nodes.find((node) => node.name === 'Upload Media');
  Object.assign(upload.parameters, { destination: 'index', indexId: id(state.indexId), idempotencyKey: `${state.runTag}:upload` });
- definition.nodes.find((node) => node.name === 'Start Run').parameters.idempotencyKey = `${state.runTag}:run`;
+ if (reuseUploaded) {
+  assert(state.videoId, 'A completed upload is required for resume-prepare');
+  definition.nodes = definition.nodes.filter((node) => !['Fetch Media', 'Upload Media'].includes(node.name));
+  definition.nodes.push({ id: randomUUID(), name: 'Upload Media', type: 'n8n-nodes-base.code', typeVersion: 2, position: [600, 0], parameters: { mode: 'runOnceForAllItems', jsCode: `return [{json:{video:{video_id:${JSON.stringify(state.videoId)}}}}];` } });
+  definition.connections.Configure = link('Upload Media'); delete definition.connections['Fetch Media'];
+ }
+ definition.nodes.find((node) => node.name === 'Start Run').parameters.idempotencyKey = `${state.runTag}:run:index`;
  const wait = { id: randomUUID(), name: 'Persistence Check', type: 'n8n-nodes-base.wait', typeVersion: 1.1, position: [900, -150], parameters: { resume: 'timeInterval', amount: 65, unit: 'seconds' } };
  definition.nodes.push(wait);
  definition.connections['Start Run'] = link('Persistence Check');
@@ -95,7 +107,7 @@ async function prepare() {
  // The native template starts with Manual Trigger; runCase uses Start consistently.
  definition.nodes.find((node) => node.name === 'Manual Trigger').name = 'Start';
  definition.connections.Start = definition.connections['Manual Trigger']; delete definition.connections['Manual Trigger'];
- const result = await scenario('Binary upload and durable first Wait', definition, (execution) => {
+ const result = await scenario(reuseUploaded ? 'Resume previous upload and durable first Wait' : 'Binary upload and durable first Wait', definition, (execution) => {
   const uploadResult = output(execution, 'Upload Media')[0]?.json;
   const runResult = output(execution, 'Start Run')[0]?.json;
   if (uploadResult?.video?.video_id) state.videoId = uploadResult.video.video_id;
@@ -194,6 +206,8 @@ async function finish() {
 }
 const mode = process.argv[2];
 if (mode === 'prepare') await prepare();
+else if (mode === 'prepare-binary') await prepareBinary();
+else if (mode === 'resume-prepare') await prepareBinary(true);
 else if (mode === 'finish') await finish();
-else throw new Error('Usage: node scripts/live-media.mjs prepare|finish [timeoutMs]');
+else throw new Error('Usage: node scripts/live-media.mjs prepare|prepare-binary|resume-prepare|finish [timeoutMs]');
 process.exitCode = state.results.filter((result) => result.mode === mode).some((result) => result.status !== 'passed') ? 1 : 0;

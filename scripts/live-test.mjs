@@ -24,10 +24,14 @@ export class N8nClient {
     const text = await response.text();
     let parsed;
     try { parsed = JSON.parse(text); } catch { parsed = { message: text.slice(0, 200) }; }
-    if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${parsed.message || parsed.error || response.statusText}`);
+    if (!response.ok) throw Object.assign(new Error(`${method} ${path}: ${response.status} ${parsed.message || parsed.error || response.statusText}`), { statusCode: response.status });
     return parsed.data ?? parsed;
   }
   async login() {
+    if (this.state.cookie) {
+      try { await this.request('/login'); return; }
+      catch (error) { if (error.statusCode !== 401) throw error; }
+    }
     await this.request('/login', 'POST', { emailOrLdapLoginId: this.state.email, password: this.state.password });
     await saveState(this.state);
   }
