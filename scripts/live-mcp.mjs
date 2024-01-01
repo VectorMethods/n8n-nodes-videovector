@@ -10,16 +10,16 @@ import { loadClient, output } from './live-test.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const result = {
-  name: 'Shipped standalone MCP example lists indexes without a model',
+  name: 'Shipped standalone MCP example browses an index page without a model',
   started: new Date().toISOString(), status: 'passed',
-  endpoint: 'https://api.vectormethods.com/mcp', tool: 'list_indexes',
+  endpoint: 'https://api.vectormethods.com/mcp', tool: 'browse',
 };
 try {
   const client = await loadClient();
   await client.login();
   const credential = client.state.httpCredential;
   assert(credential, 'Bootstrap an authorized live Header Auth credential before MCP acceptance');
-  const definition = JSON.parse(await readFile(resolve(root, 'examples/mcp-list-indexes.json'), 'utf8'));
+  const definition = JSON.parse(await readFile(resolve(root, 'examples/mcp-browse-indexes.json'), 'utf8'));
   definition.name = `VideoVector QA · ${definition.name}`;
   const node = definition.nodes.find((entry) => entry.type === '@n8n/n8n-nodes-langchain.mcpClient');
   assert.equal(node.parameters.tool.value, result.tool);
@@ -36,14 +36,19 @@ try {
   const items = output(execution, node.name);
   assert.equal(items.length, 1);
   const data = items[0].json.structuredContent;
-  assert(data && Number.isInteger(data.total_indexes), 'MCP must preserve canonical structuredContent');
-  assert(Array.isArray(data.user_indexes));
-  assert(Array.isArray(data.default_indexes));
-  assert.equal(data.total_indexes, data.user_indexes.length + data.default_indexes.length);
+  assert.equal(data?.resource, 'indexes', 'MCP must preserve canonical structuredContent');
+  assert(Array.isArray(data.entries));
+  assert.equal(typeof data.pagination?.has_more, 'boolean');
+  assert.equal(data.pagination.has_more, typeof data.pagination.next_cursor === 'string' && data.pagination.next_cursor.length > 0);
+  assert.equal(data.next_action?.type, data.pagination.has_more ? 'continue_browsing' : 'select_resource');
+  for (const entry of data.entries) {
+    assert.equal(typeof entry.index_id, 'string');
+    assert.equal(typeof entry.name, 'string');
+  }
   assert.equal(items[0].pairedItem.item, 0, 'MCP must retain the source item link');
   // Keep resource names and IDs out of the acceptance report.
-  result.output = { totalIndexes: data.total_indexes, userIndexes: data.user_indexes.length,
-    defaultIndexes: data.default_indexes.length, structuredContent: true, pairedItem: 0 };
+  result.output = { returnedIndexes: data.entries.length, hasMore: data.pagination.has_more,
+    structuredContent: true, pairedItem: 0 };
 } catch (error) {
   Object.assign(result, { status: 'failed', error: error.message });
 }

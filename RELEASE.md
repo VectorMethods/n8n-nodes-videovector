@@ -1,3 +1,9 @@
+# 2.1.0 release changes
+
+- Accept one or up to eight public HTTPS media and individual YouTube URLs without file descriptors.
+- Transfer n8n binary inputs through the existing resumable storage contract with three concurrent uploads, bounded chunks, and ordered import-job outputs.
+- Preserve current manifest, retry, trigger, and asynchronous processing behavior.
+
 # Public release setup
 
 The public source repository is `VectorMethods/n8n-nodes-videovector`. The npm

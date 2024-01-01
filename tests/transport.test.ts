@@ -15,7 +15,7 @@ function context(options: { context?: Record<string, unknown>; executionId?: str
     getExecutionId: () => options.executionId || 'execution-1',
     getWorkflowDataProxy: () => ({ $runIndex: options.runIndex || 0 }),
     helpers: { httpRequestWithAuthentication: authenticated, httpRequest: anonymous, prepareBinaryData: prepare,
-      assertBinaryData: vi.fn(), getBinaryStream: vi.fn() },
+      assertBinaryData: vi.fn(), getBinaryStream: vi.fn(), getBinaryMetadata: vi.fn().mockResolvedValue({ fileSize: 5 }) },
   };
   return { value: value as unknown as IExecuteFunctions, raw: value, state, authenticated, anonymous, prepare };
 }
@@ -121,27 +121,55 @@ describe('HTTP boundary', () => {
 });
 
 describe('binary upload', () => {
-  it('streams stored binary data and reopens it on each attempt', async () => {
-    const ctx = context();
-    ctx.raw.helpers.assertBinaryData.mockReturnValue({ id: 'filesystem:1', data: 'filesystem', fileName: 'clip.mov', mimeType: 'video/quicktime' });
-    const stream = { pipe: vi.fn(), path: '/private/binary' };
-    ctx.raw.helpers.getBinaryStream.mockResolvedValue(stream);
-    await uploadBinary.call(ctx.value, 0, 'data', { index_id: 'index-1' }, 'stable-key');
-    await uploadBinary.call(ctx.value, 0, 'data', { index_id: 'index-1' }, 'stable-key');
-    expect(ctx.raw.helpers.getBinaryStream).toHaveBeenCalledTimes(2);
-    expect(stream.path).toBe('/private/binary');
-    expect(ctx.authenticated.mock.calls[0][1].body).toEqual({ file: expect.objectContaining({ name: 'clip.mov' }), index_id: 'index-1' });
+  const base = 'https://api.vectormethods.com/api/v2/workflow/attachments/job_1';
+  const storage = 'https://storage.googleapis.com/upload/storage/v1/b/media/o?uploadType=resumable&upload_id=private-session';
+  function setup(ctx: ReturnType<typeof context>, offset = 0, fail = false, url = storage) {
+    ctx.authenticated.mockResolvedValue({ job_id: 'job_1', status: 'awaiting_upload', progress: {}, upload: { url: `${base}/files`, complete_url: `${base}/complete`, token: 'scoped-secret' } });
+    ctx.raw.helpers.getBinaryStream.mockImplementation(async () => Object.assign((async function* () { yield Buffer.from('video'); })(), { destroy: vi.fn() }));
+    ctx.anonymous.mockImplementation(async request => {
+      if (request.url === `${base}/files`) return { job: { job_id: 'job_1' }, upload: { transport: 'resumable', url, total_bytes: 5, offset, chunk_size: 2 } };
+      if (request.method === 'PUT') {
+        if (fail) throw new Error(`Private ${url}`);
+        expect(request.headers.Authorization).toBeUndefined(); expect(request.headers['X-API-Key']).toBeUndefined();
+        const match = request.headers['Content-Range'].match(/^bytes (\d+)-(\d+)\/(\d+)$/);
+        const [start, end, total] = match.slice(1).map(Number);
+        expect(request.body.toString()).toBe('video'.slice(start, end + 1));
+        return { statusCode: end + 1 === total ? 200 : 308, headers: { range: `bytes=0-${end}` } };
+      }
+      return { job_id: 'job_1', status: 'pending', progress: { total_files: 1 } };
+    });
+  }
+  it('uses stored metadata without a pre-read and streams native bounded ranges', async () => {
+    const ctx = context(); setup(ctx);
+    ctx.raw.helpers.assertBinaryData.mockReturnValue({ id: 'filesystem:1', data: 'filesystem', fileName: 'clip.mp4', mimeType: 'video/mp4' });
+    const result = await uploadBinary.call(ctx.value, 0, 'data', { index_name: 'Library' }, 'stable-key');
+    expect(result).toMatchObject({ job_id: 'job_1', status: 'pending' });
+    expect(ctx.authenticated).toHaveBeenCalledTimes(1);
+    expect(ctx.raw.helpers.getBinaryMetadata).toHaveBeenCalledOnce(); expect(ctx.raw.helpers.getBinaryStream).toHaveBeenCalledOnce();
+    const requests = ctx.anonymous.mock.calls.map(call => call[0]);
+    expect(requests[0].body).toMatchObject({ file_name: 'clip.mp4', size_bytes: 5, last_modified: 0, sample_sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(requests.filter(request => request.method === 'PUT').map(request => request.headers['Content-Range'])).toEqual(['bytes 0-1/5', 'bytes 2-3/5', 'bytes 4-4/5']);
+    expect(requests.filter(request => request.url === `${base}/complete`)).toHaveLength(1);
+    for (const request of requests.filter(request => request.method === 'POST')) expect(request.headers.Authorization).toBe('Bearer scoped-secret');
   });
-  it('preserves filename and MIME with native multipart for inline bytes', async () => {
-    const ctx = context();
+  it('resumes existing native sessions from their confirmed offset', async () => {
+    const ctx = context(); setup(ctx, 2);
+    ctx.raw.helpers.assertBinaryData.mockReturnValue({ id: 'filesystem:1', data: 'filesystem', fileName: 'clip.mp4', mimeType: 'video/mp4' });
+    await uploadBinary.call(ctx.value, 0, 'data', {}, 'stable-key');
+    expect(ctx.anonymous.mock.calls.filter(call => call[0].method === 'PUT').map(call => call[0].headers['Content-Range'])).toEqual(['bytes 2-3/5', 'bytes 4-4/5']);
+  });
+  it('samples inline bytes without asking n8n to buffer the source again', async () => {
+    const ctx = context(); setup(ctx);
     ctx.raw.helpers.assertBinaryData.mockReturnValue({ data: Buffer.from('video').toString('base64'), fileName: 'clip.mp4', mimeType: 'video/mp4' });
-    await uploadBinary.call(ctx.value, 0, 'data', { title: 'Clip' }, 'stable-key');
-    const options = ctx.authenticated.mock.calls[0][1];
-    expect(options.headers['Content-Type']).toBeUndefined();
-    const file = options.body.get('file');
-    expect(file.name).toBe('clip.mp4');
-    expect(file.type).toBe('video/mp4');
-    expect(await file.text()).toBe('video');
-    expect(options.body.get('title')).toBe('Clip');
+    await uploadBinary.call(ctx.value, 0, 'data', {}, 'stable-key');
+    expect(ctx.raw.helpers.getBinaryMetadata).not.toHaveBeenCalled(); expect(ctx.raw.helpers.getBinaryStream).not.toHaveBeenCalled();
+  });
+  it.each([false, true])('never falls back or finalizes after failed transfer (untrusted: %s)', async untrusted => {
+    const ctx = context(); setup(ctx, 0, true, untrusted ? 'https://other.example/private-session' : storage);
+    ctx.raw.helpers.assertBinaryData.mockReturnValue({ data: Buffer.from('video').toString('base64'), fileName: 'clip.mp4', mimeType: 'video/mp4' });
+    const failure = await uploadBinary.call(ctx.value, 0, 'data', {}, 'stable-key').catch(error => error);
+    expect(failure).toBeInstanceOf(NodeOperationError); expect(JSON.stringify(failure)).not.toContain('private-session');
+    expect(ctx.anonymous.mock.calls.some(call => call[0].url.endsWith('/complete'))).toBe(false);
+    expect(ctx.authenticated).toHaveBeenCalledTimes(1);
   });
 });

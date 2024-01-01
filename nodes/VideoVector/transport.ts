@@ -117,40 +117,96 @@ export function operationKey(this: IExecuteFunctions, itemIndex: number, operati
 }
 
 export async function uploadBinary(
-  this: IExecuteFunctions,
-  itemIndex: number,
-  property: string,
-  fields: IDataObject,
-  idempotencyKey: string,
+  this: IExecuteFunctions, itemIndex: number, property: string,
+  fields: IDataObject, idempotencyKey: string,
 ): Promise<IDataObject> {
   const binary = this.helpers.assertBinaryData(itemIndex, property);
+  const signal = this.getExecutionCancelSignal?.();
+  if (signal?.aborted) throw new NodeOperationError(this.getNode(), 'Upload cancelled.');
   const filename = binary.fileName || `upload.${binary.fileExtension || 'bin'}`;
-  let body: unknown;
-  const headers: Record<string, string> = { Accept: 'application/json', 'Idempotency-Key': idempotencyKey };
+  const bytes = binary.id ? undefined : Buffer.from(binary.data, 'base64');
+  const size = binary.id ? (await this.helpers.getBinaryMetadata(binary.id)).fileSize : bytes!.length;
+  if (!Number.isSafeInteger(size) || size <= 0) throw new NodeOperationError(this.getNode(), 'Upload requires a known, positive binary size.');
+  const digest = createHash('sha256');
   if (binary.id) {
-    // Axios' native multipart serializer reads name as filename metadata.
-    // Never change path: stored binary streams may open it lazily.
-    const stream = await this.helpers.getBinaryStream(binary.id);
-    Object.assign(stream, { name: filename });
-    body = { ...fields, file: stream };
-    headers['Content-Type'] = 'multipart/form-data';
+    // n8n binary references are immutable for this execution. Identify the same
+    // stored source without scanning it before the native resumable transfer.
+    digest.update(JSON.stringify(['n8n-binary-v1', binary.id, size, filename, binary.mimeType]));
   } else {
-    const form = new FormData();
-    form.append('file', new Blob([Uint8Array.from(Buffer.from(binary.data, 'base64'))], { type: binary.mimeType }), filename);
-    for (const [key, value] of Object.entries(fields)) {
-      if (value !== undefined && value !== null) form.append(key, String(value));
-    }
-    body = form;
+    const last = Math.max(0, size - 64 * 1024);
+    for (const offset of new Set([0, Math.floor(last / 2), last])) digest.update(bytes!.subarray(offset, Math.min(size, offset + 64 * 1024)));
   }
+  const job = object(await apiRequest.call(this, 'POST', '/workflow/attachments', fields, undefined, idempotencyKey));
+  if (!job.upload) return job as IDataObject;
+  const grant = object(job.upload);
+  const base = `${await apiBase(this)}/workflow/attachments/${encodeURIComponent(String(job.job_id))}`;
+  if (typeof job.job_id !== 'string' || grant.url !== `${base}/files` || grant.complete_url !== `${base}/complete`
+    || typeof grant.token !== 'string' || !grant.token) throw new NodeOperationError(this.getNode(), 'Invalid attachment upload destination.');
+  const fileId = createHash('sha256').update(`${idempotencyKey}\0${0}`).digest('hex');
+  const scoped = async (url: string, body: unknown): Promise<Record<string, unknown>> => {
+    try {
+      return object(await this.helpers.httpRequest({ method: 'POST', url, body: body as IHttpRequestOptions['body'],
+        headers: { Accept: 'application/json', Authorization: `Bearer ${String(grant.token)}` },
+        json: true, timeout: 300000, disableFollowRedirect: true, abortSignal: signal }));
+    } catch (error) { throw apiError(this, error); }
+  };
+  const prepared = await scoped(String(grant.url), { file_id: fileId, file_name: filename, content_type: binary.mimeType,
+    size_bytes: size, last_modified: 0, sample_sha256: digest.digest('hex') });
+  let source: Awaited<ReturnType<IExecuteFunctions['helpers']['getBinaryStream']>> | undefined;
   try {
-    return await this.helpers.httpRequestWithAuthentication.call(this, 'videoVectorApi', {
-      method: 'POST', url: `${await apiBase(this)}/workflow/upload`,
-      body: body as IHttpRequestOptions['body'], headers, json: true,
-      timeout: 300000, disableFollowRedirect: true,
-    }) as IDataObject;
-  } catch (error) {
-    throw apiError(this, error);
-  }
+    if (prepared.upload !== null) {
+      const session = object(prepared.upload);
+      let url: URL;
+      try { url = new URL(String(session.url)); } catch { throw new NodeOperationError(this.getNode(), 'Invalid storage upload session.'); }
+      if (session.transport !== 'resumable' || url.protocol !== 'https:' || url.username || url.password || url.port || url.hash
+        || !(url.hostname === 'storage.googleapis.com' || url.hostname.endsWith('.storage.googleapis.com'))
+        || session.total_bytes !== size || !Number.isSafeInteger(session.offset) || Number(session.offset) < 0 || Number(session.offset) > size
+        || !Number.isSafeInteger(session.chunk_size) || Number(session.chunk_size) <= 0) throw new NodeOperationError(this.getNode(), 'Invalid storage upload session.');
+      let offset = Number(session.offset);
+      let position = 0; let pending = Buffer.alloc(0);
+      source = binary.id ? await this.helpers.getBinaryStream(binary.id, 64 * 1024) : undefined;
+      const iterator = source?.[Symbol.asyncIterator]();
+      const read = async (start: number, length: number): Promise<Buffer> => {
+        if (bytes) return bytes.subarray(start, start + length);
+        const result = Buffer.alloc(length); let written = 0;
+        while (written < length) {
+          if (!pending.length) {
+            const next = await iterator!.next();
+            if (next.done) throw new NodeOperationError(this.getNode(), 'Upload source ended before its expected size.');
+            pending = Buffer.isBuffer(next.value) ? next.value : Buffer.from(next.value);
+          }
+          const skipped = Math.min(Math.max(0, start - position), pending.length);
+          position += skipped; pending = pending.subarray(skipped);
+          if (position < start) continue;
+          const count = Math.min(pending.length, length - written);
+          pending.copy(result, written, 0, count);
+          written += count; position += count; pending = pending.subarray(count);
+        }
+        return result;
+      };
+      while (offset < size) {
+        signal?.throwIfAborted();
+        const start = offset; const end = Math.min(size, offset + Math.min(Number(session.chunk_size), 8 * 1024 * 1024));
+        const chunk = await read(start, end - start);
+        while (offset < end) {
+          let transferred: Record<string, unknown>;
+          try {
+            transferred = object(await this.helpers.httpRequest({ method: 'PUT', url: url.toString(), body: chunk.subarray(offset - start),
+              headers: { 'Content-Length': String(end - offset), 'Content-Range': `bytes ${offset}-${end - 1}/${size}` },
+              returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 300000, disableFollowRedirect: true,
+              sendCredentialsOnCrossOriginRedirect: false, abortSignal: signal }));
+          } catch { throw new NodeOperationError(this.getNode(), 'Storage upload was not confirmed. Retry this execution to resume the same job.', { description: `Job: ${String(job.job_id)}` }); }
+          const status = Number(transferred.statusCode);
+          const range = String(object(transferred.headers).range ?? '').match(/^bytes=0-(\d+)$/);
+          const confirmed = status === 308 ? (range ? Number(range[1]) + 1 : 0) : [200, 201].includes(status) ? size : 0;
+          if (confirmed <= offset || confirmed > end) throw new NodeOperationError(this.getNode(), 'Storage did not confirm the uploaded bytes. Retry this execution to resume.', { description: `Job: ${String(job.job_id)}` });
+          offset = confirmed;
+        }
+      }
+    }
+    await scoped(`${grant.url}/complete`, { file_id: fileId });
+    return await scoped(String(grant.complete_url), { file_ids: [fileId] }) as IDataObject;
+  } finally { source?.destroy(); }
 }
 
 export async function downloadBinary(

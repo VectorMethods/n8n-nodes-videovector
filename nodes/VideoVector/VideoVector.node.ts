@@ -40,9 +40,10 @@ export class VideoVector implements INodeType {
   },
  };
  async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-  const output: INodeExecutionData[] = [];
-  for (let index = 0; index < this.getInputData().length; index++) {
-   try { output.push(...await executeOperation(this, index)); }
+  const count = this.getInputData().length;
+  const output: INodeExecutionData[][] = Array.from({ length: count }, () => []);
+  const executeItem = async (index: number): Promise<void> => {
+   try { output[index] = await executeOperation(this, index); }
    catch (error) {
     if (this.continueOnFail()) {
      const failure = nodeError(this, error, index);
@@ -72,16 +73,28 @@ export class VideoVector implements INodeType {
        ...(failure.description ? { description: failure.description } : {}),
        details,
       };
-     output.push({
+     output[index] = [{
       json,
       ...(source.binary ? { binary: source.binary } : {}),
       pairedItem: { item: index },
-     });
-     continue;
+     }];
+     return;
     }
     throw nodeError(this, error, index);
    }
-  }
-  return [output];
+  };
+  const uploads = count > 0 && this.getInputData().every((_, index) =>
+   this.getNodeParameter('resource', index) === 'media' && this.getNodeParameter('operation', index) === 'upload');
+  let next = 0; let failed = false;
+  const outcomes = await Promise.allSettled(Array.from({ length: Math.min(uploads ? 3 : 1, count) }, async () => {
+   while (!failed && next < count) {
+    const index = next++;
+    try { await executeItem(index); }
+    catch (error) { failed = true; throw nodeError(this, error, index); }
+   }
+  }));
+  const failure = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+  if (failure) throw nodeError(this, failure.reason);
+  return [output.flat()];
  }
 }

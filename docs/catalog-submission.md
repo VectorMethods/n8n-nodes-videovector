@@ -57,7 +57,7 @@ this packet, workflow JSON, screenshots, or public issues.
 - [Native binary upload → process → results](https://github.com/VectorMethods/n8n-nodes-videovector/blob/main/examples/native-upload-process-results.json)
 - [Native URL import → process → results](https://github.com/VectorMethods/n8n-nodes-videovector/blob/main/examples/native-url-import-process-results.json)
 - [Built-in HTTP → process → results](https://github.com/VectorMethods/n8n-nodes-videovector/blob/main/examples/http-process-results.json)
-- [Built-in MCP Client → list indexes](https://github.com/VectorMethods/n8n-nodes-videovector/blob/main/examples/mcp-list-indexes.json)
+- [Built-in MCP Client → browse indexes](https://github.com/VectorMethods/n8n-nodes-videovector/blob/main/examples/mcp-browse-indexes.json)
 - [AI agent with hosted MCP tools](https://github.com/VectorMethods/n8n-nodes-videovector/blob/main/examples/mcp-agent.json)
 
 Processing templates use persisted 65-second Waits and a configurable 24-hour
