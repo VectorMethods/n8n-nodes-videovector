@@ -192,6 +192,19 @@ def npm_json(*args, absent_ok=False):
     return json.loads(result.stdout or "null")
 
 
+def wait_for_npm_version(package_version):
+    # npm acknowledges a new package before its asynchronous processing exposes
+    # the version. Only an absent version is retried; auth and registry failures
+    # remain explicit, and an expired wait leaves the staged bundle for recovery.
+    for attempt in range(120):
+        observed = npm_json("view", package_version, absent_ok=True)
+        if observed is not None:
+            return observed
+        if attempt < 119:
+            time.sleep(5)
+    raise RuntimeError("Published npm version is still processing; recover the staged release after registry visibility")
+
+
 def semver_key(value):
     core, _, pre = value.partition("-")
     parts = tuple(int(part) for part in core.split("."))
@@ -211,7 +224,7 @@ def publish():
     observed = npm_json("view", package_version, absent_ok=True)
     if observed is None:
         subprocess.run(["npm", "publish", str((BUNDLE / manifest["artifacts"][0]["path"]).resolve()), "--access", "public", "--ignore-scripts", "--provenance", "--tag", temporary], check=True)
-        observed = npm_json("view", package_version)
+        observed = wait_for_npm_version(package_version)
     assert observed["dist"]["integrity"] == f"sha512-{wanted['sha512']}" and observed["dist"]["shasum"] == wanted["sha1"], "Published npm bytes differ"
     for field in ["name", "version", "engines", "n8n"]:
         assert observed[field] == npm[field], "Published npm metadata differs"
