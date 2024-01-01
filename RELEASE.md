@@ -60,8 +60,9 @@ publisher values in the package settings:
 
 Create the public repository's protected **npm** environment, restricted to
 `videovector-n8n-v*` tags, before the first publication. The workflow uses
-GitHub-hosted runners and `id-token: write`. Its reviewed publisher is npm
-11.15.0 on Node.js 24.21.0. The dist-tag permission is necessary because the
+GitHub-hosted runners and `id-token: write`. The bundle builder remains npm
+11.15.0; the publisher is npm 11.21.0, the first npm 11 release supporting OIDC
+dist-tag management. Both use Node.js 24.21.0. The dist-tag permission is necessary because the
 release helper advances `latest` or `next` and removes its temporary tag.
 New trusted publisher configurations must complete a successful first publish
 within two days. [npm trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/)

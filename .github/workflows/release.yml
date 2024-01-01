@@ -145,7 +145,7 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - name: Install exact npm publisher
-        run: npm install --global npm@11.15.0 --ignore-scripts
+        run: npm install --global npm@11.21.0 --ignore-scripts
       - name: Verify staged release input
         env:
           GH_TOKEN: ${{ github.token }}

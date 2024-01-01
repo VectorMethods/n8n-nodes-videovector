@@ -201,6 +201,7 @@ def semver_key(value):
 
 
 def publish():
+    assert run("npm", "--version") == "11.21.0", "Use the reviewed publisher with OIDC dist-tag support"
     manifest, metadata = verify_bundle()
     npm = metadata["npm"]
     wanted = npm["tarball"]
