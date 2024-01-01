@@ -56,6 +56,22 @@ describe('HTTP boundary', () => {
     await expect(apiRequest.call(ctx.value, 'GET', 'https://other.example')).rejects.toThrow();
     expect(ctx.authenticated).not.toHaveBeenCalled();
   });
+  it('preserves required empty JSON bodies through the native helper without adding bodies to other requests', async () => {
+    const ctx = context();
+    await apiRequest.call(ctx.value, 'POST', '/search/sql/index-1/catalog', {});
+    await apiRequest.call(ctx.value, 'POST', '/chat/sessions', {}, undefined, 'session-key');
+    await apiRequest.call(ctx.value, 'POST', '/exports/export-1/download-url');
+    const requests = ctx.authenticated.mock.calls.map((call) => call[1]);
+    for (const request of requests.slice(0, 2)) {
+      // The native helper sends strings, but omits empty object data.
+      expect(typeof request.body).toBe('string');
+      expect(JSON.parse(request.body)).toEqual({});
+      expect(request.headers['Content-Type']).toBe('application/json');
+    }
+    expect(requests[1].headers['Idempotency-Key']).toBe('session-key');
+    expect(requests[2].body).toBeUndefined();
+    expect(requests[2].headers['Content-Type']).toBeUndefined();
+  });
   it('preserves useful API errors without retaining the credential-bearing request', async () => {
     const ctx = context();
     ctx.authenticated.mockRejectedValue({ response: { status: 429, data: { message: 'Rate limited', code: 'rate_limit' },

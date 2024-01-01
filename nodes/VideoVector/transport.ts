@@ -83,13 +83,18 @@ export async function apiRequest<T = IDataObject>(
   if (!path.startsWith('/') || path.startsWith('//')) {
     throw new NodeOperationError(this.getNode(), 'API paths must be relative to the configured VideoVector API.');
   }
+  // n8n's request helper drops empty objects. Keep an explicit JSON body when
+  // endpoints require it, while preserving genuinely bodyless requests.
+  const emptyJson = body !== null && typeof body === 'object' &&
+    !Array.isArray(body) && Object.keys(body).length === 0;
   try {
     return await this.helpers.httpRequestWithAuthentication.call(this, 'videoVectorApi', {
       method,
       url: `${await apiBase(this)}${path}`,
-      body: body as IHttpRequestOptions['body'],
+      body: (emptyJson ? '{}' : body) as IHttpRequestOptions['body'],
       qs,
-      headers: { Accept: 'application/json', ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) },
+      headers: { Accept: 'application/json', ...(emptyJson ? { 'Content-Type': 'application/json' } : {}),
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) },
       json: true,
       timeout: 300000,
       disableFollowRedirect: true,

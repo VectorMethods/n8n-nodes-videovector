@@ -78,6 +78,8 @@ const props: INodeProperties[] = [
  text('Instruction', 'instruction', { required: true, typeOptions: { rows: 4 }, displayOptions: shown('run', ['start'], { promptSource: ['instruction'] }) }),
  options('Target', 'target', [['index', 'Entire Index'], ['videos', 'Specific Media'], ['playground', 'Entire Playground']], 'index', { displayOptions: shown('run', ['start', 'estimate']) }),
  id('indexId', shown('run', ['start', 'estimate'], { target: ['index'] })),
+ options('Media Location', 'mediaScope', [['playground', 'Playground'], ['index', 'Index']], 'playground', { displayOptions: shown('run', ['start', 'estimate'], { target: ['videos'] }), description: 'Location containing the selected media. All selected media must belong to this location.' }),
+ id('indexId', shown('run', ['start', 'estimate'], { target: ['videos'], mediaScope: ['index'] })),
  json('Media IDs', 'videoIds', '[]', { required: true, displayOptions: shown('run', ['start', 'estimate'], { target: ['videos'] }) }),
  additional('run', ['start', 'estimate'], executionFields),
  id('runId', shown('run', ['get', 'results', 'cancel', 'failures', 'retrySegment', 'retryStatus'])),

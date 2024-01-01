@@ -43,6 +43,12 @@
               "type": "string"
             },
             {
+              "id": "indexId",
+              "name": "indexId",
+              "value": "",
+              "type": "string"
+            },
+            {
               "id": "videoId",
               "name": "videoId",
               "value": "REPLACE_WITH_EXISTING_VIDEO_ID",
@@ -79,7 +85,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ {prompt_id: $('Configure').first().json.promptId, video_ids: [$('Configure').first().json.videoId]} }}",
+        "jsonBody": "={{ {prompt_id: $('Configure').first().json.promptId, video_ids: [$('Configure').first().json.videoId], ...($('Configure').first().json.indexId ? {index_id: $('Configure').first().json.indexId} : {})} }}",
         "options": {}
       }
     },

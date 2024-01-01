@@ -79,6 +79,26 @@ describe('Execution behavior', () => {
   await executeOperation(context({ resource: 'run', operation: 'start', promptId: id('p'), target: 'videos', videoIds: ['v'], additionalFields: { enable_transcription: false, enable_image_embedding: false } }), 0);
   expect(api.mock.calls[0][2]).toEqual({ prompt_id: 'p', video_ids: ['v'], enable_transcription: false, enable_image_embedding: false });
  });
+ it.each(['start', 'estimate'])('keeps indexed-media membership when %s targets specific media', async (operation) => {
+  await executeOperation(context({ resource: 'run', operation, promptId: id('p'), target: 'videos', mediaScope: 'index', indexId: id('library'), videoIds: '["v1","v2"]' }), 0);
+  const scope = { video_ids: ['v1', 'v2'], index_id: 'library' };
+  expect(api.mock.calls[0][2]).toEqual(operation === 'start' ? { prompt_id: 'p', ...scope } : { prompt_id: 'p', target: { type: 'videos', ...scope } });
+ });
+ it.each([undefined, 'playground'])('omits a stale index selector for playground specific media (%s)', async (mediaScope) => {
+  await executeOperation(context({ resource: 'run', operation: 'start', promptId: id('p'), target: 'videos', mediaScope, indexId: id('previous-library'), videoIds: ['v'] }), 0);
+  expect(api.mock.calls[0][2]).toEqual({ prompt_id: 'p', video_ids: ['v'] });
+ });
+ it('preserves the independent media search scope resolver', async () => {
+  api.mockResolvedValue(page([]));
+  await executeOperation(context({ resource: 'search', operation: 'semantic', query: 'Scene', searchScope: 'videos', videoIds: ['v'], mediaScope: 'index', indexId: id('previous-library') }), 0);
+  expect(api.mock.calls[0][2]).toEqual({ video_ids: ['v'], query: 'Scene', result_level: 'segment', limit: 50 });
+ });
+ it('exposes indexed-specific-media fields to n8n parameter normalization', () => {
+  const location = properties.find((property) => property.name === 'mediaScope');
+  expect(location?.displayOptions?.show).toEqual({ resource: ['run'], operation: ['start', 'estimate'], target: ['videos'] });
+  expect(location?.default).toBe('playground');
+  expect(properties.find((property) => property.name === 'indexId' && property.displayOptions?.show?.mediaScope?.includes('index'))?.displayOptions?.show).toEqual({ resource: ['run'], operation: ['start', 'estimate'], target: ['videos'], mediaScope: ['index'] });
+ });
  it('evaluates parameters for each input and pairs every list result', async () => {
   api.mockResolvedValue([{ index_id: 'a' }, { index_id: 'b' }]);
   const output = await new VideoVector().execute.call(context({ resource: 'index', operation: 'list' }, {}, [{ json: { source: 1 } }, { json: { source: 2 } }]));

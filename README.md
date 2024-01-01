@@ -44,6 +44,8 @@ result window or turn a limited list endpoint into an exhaustive listing.
 warnings so workflows can inspect truncation and selection readiness.
 Run results support segment/video level and filtered/unfiltered/both views.
 Partial completion and failure details remain visible in status responses.
+For **Run → Start** or **Estimate** with **Specific Media**, select its
+**Media Location**: Playground, or Index with the containing index ID.
 
 Use n8n's **Retry On Fail** to schedule transient retries. **Continue (using
 error output)** sends failed items to the error branch with their original
@@ -128,6 +130,9 @@ For HTTP Request, create a **Header Auth** credential with header name
 public API and an `Idempotency-Key` on submissions. Use native Wait/If nodes as
 shown by the HTTP template. Follow each filtered/unfiltered result cursor
 independently when retrieving both views.
+In the HTTP template's **Configure** node, leave `indexId` empty for Playground
+media or set the existing media's index ID. The template retains `videoId` so
+processing stays limited to that selected media.
 
 The hosted MCP endpoint is `https://api.vectormethods.com/mcp`. To call a tool
 directly, use the built-in **MCP Client** with streamable HTTP and the same

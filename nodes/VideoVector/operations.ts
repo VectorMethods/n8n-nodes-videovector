@@ -38,7 +38,10 @@ function arrayParameter(ctx: IExecuteFunctions, i: number, name: string): IDataO
 function scopeFields(ctx: IExecuteFunctions, i: number, name: string): IDataObject {
  switch (parameter(ctx, i, name, 'index')) {
   case 'index': return { index_id: parameter(ctx, i, 'indexId') };
-  case 'videos': return { video_ids: arrayParameter(ctx, i, 'videoIds') };
+  case 'videos': return {
+   video_ids: arrayParameter(ctx, i, 'videoIds'),
+   ...(name === 'target' && parameter(ctx, i, 'mediaScope', 'playground') === 'index' ? { index_id: parameter(ctx, i, 'indexId') } : {}),
+  };
   case 'runs': return { prompt_run_ids: arrayParameter(ctx, i, 'runIds') };
   default: return {};
  }
