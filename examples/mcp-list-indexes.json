@@ -1,0 +1,38 @@
+{
+  "name": "VideoVector MCP list indexes without an AI model",
+  "nodes": [
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "videovector-mcp",
+      "name": "List Indexes with MCP",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [280, 0],
+      "parameters": {
+        "endpointUrl": "https://api.vectormethods.com/mcp",
+        "serverTransport": "httpStreamable",
+        "authentication": "headerAuth",
+        "tool": {"__rl": true, "mode": "id", "value": "list_indexes"},
+        "inputMode": "json",
+        "jsonInput": "={{ {include_defaults: true} }}",
+        "options": {"timeout": 60000}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "List Indexes with MCP", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "pinData": {},
+  "tags": []
+}

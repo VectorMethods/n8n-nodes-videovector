@@ -1,0 +1,812 @@
+{
+  "name": "VideoVector URL import, process, wait and results",
+  "nodes": [
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "configure",
+      "name": "Configure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "promptId",
+              "name": "promptId",
+              "value": "REPLACE_WITH_PROMPT_ID",
+              "type": "string"
+            },
+            {
+              "id": "deadline",
+              "name": "deadline",
+              "value": "={{ new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() }}",
+              "type": "string"
+            },
+            {
+              "id": "mediaUrl",
+              "name": "mediaUrl",
+              "value": "https://example.com/replace-with-media.mp4",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "submit-import",
+      "name": "Submit Import",
+      "type": "@vectormethods/n8n-nodes-videovector.videoVector",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "resource": "media",
+        "operation": "importUrls",
+        "files": "={{ JSON.stringify([{download_url:$json.mediaUrl,file_id:'n8n-source-media'}]) }}",
+        "destination": "playground"
+      }
+    },
+    {
+      "id": "import-media",
+      "name": "Import Media",
+      "type": "@vectormethods/n8n-nodes-videovector.videoVector",
+      "typeVersion": 1,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "resource": "import",
+        "operation": "get",
+        "jobId": "={{ $('Submit Import').first().json.job_id }}"
+      }
+    },
+    {
+      "id": "import-failed?",
+      "name": "Import Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Import Failed?",
+              "leftValue": "={{ ['failed','cancelled'].includes($json.status) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "import-failure",
+      "name": "Import Failure",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        800,
+        350
+      ],
+      "parameters": {
+        "errorMessage": "={{ 'Import ' + $('Submit Import').first().json.job_id + ' failed: ' + JSON.stringify($json) }}"
+      }
+    },
+    {
+      "id": "import-complete?",
+      "name": "Import Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Import Complete?",
+              "leftValue": "={{ $json.status === 'completed' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "import-deadline?",
+      "name": "Import Deadline?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        450
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Import Deadline?",
+              "leftValue": "={{ Date.now() >= Date.parse($('Configure').first().json.deadline) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "import-timeout",
+      "name": "Import Timeout",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        450
+      ],
+      "parameters": {
+        "errorMessage": "={{ 'Timed out waiting for import ' + $('Submit Import').first().json.job_id + '. Resume with Import Get.' }}"
+      }
+    },
+    {
+      "id": "wait-for-import",
+      "name": "Wait for Import",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1000,
+        650
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 65,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "start-run",
+      "name": "Start Run",
+      "type": "@vectormethods/n8n-nodes-videovector.videoVector",
+      "typeVersion": 1,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "resource": "run",
+        "operation": "start",
+        "promptSource": "saved",
+        "promptId": {
+          "mode": "id",
+          "value": "={{ $('Configure').first().json.promptId }}",
+          "__rl": true
+        },
+        "target": "videos",
+        "videoIds": "={{ JSON.stringify($json.video_ids) }}"
+      }
+    },
+    {
+      "id": "get-run",
+      "name": "Get Run",
+      "type": "@vectormethods/n8n-nodes-videovector.videoVector",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "resource": "run",
+        "operation": "get",
+        "runId": {
+          "mode": "id",
+          "value": "={{ $('Start Run').first().json.run_id }}",
+          "__rl": true
+        }
+      }
+    },
+    {
+      "id": "run-failed?",
+      "name": "Run Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Run Failed?",
+              "leftValue": "={{ ['failed','cancelled'].includes($json.status) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "run-failure",
+      "name": "Run Failure",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        -200
+      ],
+      "parameters": {
+        "errorMessage": "={{ 'Run ' + $('Start Run').first().json.run_id + ' ended as ' + $json.status + ': ' + JSON.stringify($json) }}"
+      }
+    },
+    {
+      "id": "run-complete?",
+      "name": "Run Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1400,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Run Complete?",
+              "leftValue": "={{ ['completed','completed_with_failures'].includes($json.status) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "partial-results?",
+      "name": "Partial Results?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        -50
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Partial Results?",
+              "leftValue": "={{ $json.status === 'completed_with_failures' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "partial-completion",
+      "name": "Partial Completion",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1800,
+        -180
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "outcome",
+              "value": "partial; inspect Run Failures for failed segments",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "run-deadline?",
+      "name": "Run Deadline?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Run Deadline?",
+              "leftValue": "={{ Date.now() >= Date.parse($('Configure').first().json.deadline) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "run-timeout",
+      "name": "Run Timeout",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        100
+      ],
+      "parameters": {
+        "errorMessage": "={{ 'Timed out waiting for run ' + $('Start Run').first().json.run_id + '. Resume with Get Run; processing continues on VideoVector.' }}"
+      }
+    },
+    {
+      "id": "wait-for-run",
+      "name": "Wait for Run",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1800,
+        300
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 65,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "get-results",
+      "name": "Get Results",
+      "type": "@vectormethods/n8n-nodes-videovector.videoVector",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        0
+      ],
+      "parameters": {
+        "resource": "run",
+        "operation": "results",
+        "runId": {
+          "mode": "id",
+          "value": "={{ $('Start Run').first().json.run_id }}",
+          "__rl": true
+        },
+        "resultLevel": "segment",
+        "view": "unfiltered",
+        "returnAll": true,
+        "fullResponse": false
+      }
+    },
+    {
+      "id": "import-partial",
+      "name": "Import Partial?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        950,
+        -200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "import-partial",
+              "leftValue": "={{ $json.progress.failed > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "import-partial-note",
+      "name": "Import Partial Completion",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1100,
+        -200
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "import-outcome",
+              "name": "import_outcome",
+              "value": "partial; successful video_ids continue and failed_files remain in import status",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Configure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure": {
+      "main": [
+        [
+          {
+            "node": "Submit Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Import": {
+      "main": [
+        [
+          {
+            "node": "Import Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import Media": {
+      "main": [
+        [
+          {
+            "node": "Import Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import Failed?": {
+      "main": [
+        [
+          {
+            "node": "Import Failure",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Import Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import Complete?": {
+      "main": [
+        [
+          {
+            "node": "Import Partial?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Import Deadline?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import Deadline?": {
+      "main": [
+        [
+          {
+            "node": "Import Timeout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait for Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Import": {
+      "main": [
+        [
+          {
+            "node": "Import Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Run": {
+      "main": [
+        [
+          {
+            "node": "Get Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Run": {
+      "main": [
+        [
+          {
+            "node": "Run Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Failed?": {
+      "main": [
+        [
+          {
+            "node": "Run Failure",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Complete?": {
+      "main": [
+        [
+          {
+            "node": "Partial Results?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Deadline?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Partial Results?": {
+      "main": [
+        [
+          {
+            "node": "Partial Completion",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Partial Completion": {
+      "main": [
+        [
+          {
+            "node": "Get Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Deadline?": {
+      "main": [
+        [
+          {
+            "node": "Run Timeout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait for Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Run": {
+      "main": [
+        [
+          {
+            "node": "Get Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import Partial?": {
+      "main": [
+        [
+          {
+            "node": "Import Partial Completion",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import Partial Completion": {
+      "main": [
+        [
+          {
+            "node": "Start Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 86520
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}

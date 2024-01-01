@@ -1,0 +1,31 @@
+services:
+  n8n:
+    image: n8nio/n8n:2.42.4
+    container_name: videovector-n8n
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      N8N_EDITOR_BASE_URL: http://localhost:5678
+      N8N_WEBHOOK_URL: ${N8N_TEST_WEBHOOK_URL:-http://localhost:5678/}
+      N8N_PROXY_HOPS: 1
+      N8N_SECURE_COOKIE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_DEFAULT_BINARY_DATA_MODE: filesystem
+      N8N_COMMUNITY_PACKAGES_ENABLED: "true"
+      N8N_UNVERIFIED_PACKAGES_ENABLED: "true"
+      N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE: "true"
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      GENERIC_TIMEZONE: America/Toronto
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ../.local/n8n/packages:/packages:ro
+      - ../.local/n8n/fixtures:/fixtures:ro
+volumes:
+  n8n-data:
+    name: videovector-n8n-data

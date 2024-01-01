@@ -1,0 +1,10 @@
+{
+ "node": "@vectormethods/n8n-nodes-videovector.videoVector",
+ "nodeVersion": "1.0",
+ "codexVersion": "1.0",
+ "categories": ["Analytics", "Data & Storage"],
+ "resources": {
+  "credentialDocumentation": [{ "url": "https://vectormethods.com/docs/guides/n8n" }],
+  "primaryDocumentation": [{ "url": "https://vectormethods.com/docs/guides/n8n" }]
+ }
+}

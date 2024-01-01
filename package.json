@@ -1,0 +1,73 @@
+{
+  "name": "@vectormethods/n8n-nodes-videovector",
+  "version": "1.0.0",
+  "description": "VideoVector media intelligence actions and signed event triggers for n8n",
+  "keywords": [
+    "n8n-community-node-package",
+    "videovector",
+    "vectormethods",
+    "video",
+    "media",
+    "ai"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "VectorMethods",
+    "email": "support@vectormethods.com"
+  },
+  "homepage": "https://vectormethods.com/docs/guides/n8n",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VectorMethods/n8n-nodes-videovector.git"
+  },
+  "bugs": {
+    "url": "https://github.com/VectorMethods/n8n-nodes-videovector/issues"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "packageManager": "npm@11.15.0",
+  "files": [
+    "dist",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "n8n-node build",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit --incremental false",
+    "test": "vitest run",
+    "check:examples": "node scripts/check-examples.mjs",
+    "verify": "node scripts/verify.mjs",
+    "scan": "node scripts/scan.mjs",
+    "pack:release": "npm pack --ignore-scripts"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [
+      "dist/credentials/VideoVectorApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/VideoVector/VideoVector.node.js",
+      "dist/nodes/VideoVectorTrigger/VideoVectorTrigger.node.js"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "0.51.3",
+    "@n8n/scan-community-package": "0.38.0",
+    "@types/node": "24.10.1",
+    "flatted": "3.4.2",
+    "n8n-workflow": "2.42.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

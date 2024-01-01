@@ -1,0 +1,162 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      release_body_sha256:
+        required: true
+        type: string
+      expected_target_sha:
+        required: true
+        type: string
+      operation_nonce:
+        required: true
+        type: string
+      draft_release_id:
+        required: true
+        type: string
+      bundle_source_release_id:
+        required: false
+        type: string
+      bundle_source_asset_id:
+        required: false
+        type: string
+      bundle_source_sha256:
+        required: false
+        type: string
+run-name: Release ${{ inputs.release_tag }} [${{ inputs.operation_nonce }}]
+permissions:
+  contents: read
+concurrency:
+  group: n8n-npm-release
+  cancel-in-progress: false
+env:
+  RELEASE_TAG: ${{ inputs.release_tag }}
+  EXPECTED_TARGET_SHA: ${{ inputs.expected_target_sha }}
+  RELEASE_BODY_SHA256: ${{ inputs.release_body_sha256 }}
+  OPERATION_NONCE: ${{ inputs.operation_nonce }}
+  DRAFT_RELEASE_ID: ${{ inputs.draft_release_id }}
+  BUNDLE_SOURCE_RELEASE_ID: ${{ inputs.bundle_source_release_id }}
+  BUNDLE_SOURCE_ASSET_ID: ${{ inputs.bundle_source_asset_id }}
+  BUNDLE_SOURCE_SHA256: ${{ inputs.bundle_source_sha256 }}
+jobs:
+  build:
+    name: Build or recover immutable npm bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate bot, tag, and approved draft identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release.py guard
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - name: Install exact npm tool
+        run: npm install --global npm@11.15.0 --ignore-scripts
+      - name: Restore already staged immutable bundle
+        if: ${{ inputs.bundle_source_asset_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release.py restore
+      - name: Build and verify new bundle without publication credentials
+        if: ${{ inputs.bundle_source_asset_id == '' }}
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm run verify
+          npm audit --omit=dev --audit-level=high
+          python3 scripts/release.py build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: n8n-release-bundle
+          path: |
+            release-bundle/release-bundle.zip
+            release-bundle/release-manifest.json
+            release-bundle/registry-metadata.json
+          if-no-files-found: error
+          retention-days: 90
+  stage:
+    name: Attest and durably stage before npm publication
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: n8n-release-bundle
+          path: release-bundle
+      - name: Revalidate exact release inputs and bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release.py guard
+          python3 scripts/release.py unpack
+      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: |
+            release-bundle/release-bundle.zip
+            release-bundle/release-manifest.json
+            release-bundle/registry-metadata.json
+      - name: Store exact create-only draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release.py stage
+  publish-npm:
+    name: Publish exact npm artifact
+    needs: stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: n8n-release-bundle
+          path: release-bundle
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24.21.0'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install exact npm publisher
+        run: npm install --global npm@11.15.0 --ignore-scripts
+      - name: Verify staged release input
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release.py guard
+          python3 scripts/release.py unpack
+      - name: Publish with provenance and monotonic dist-tag
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then unset NODE_AUTH_TOKEN; fi
+          python3 scripts/release.py publish
