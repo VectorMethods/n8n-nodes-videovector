@@ -94,9 +94,9 @@ async function prepareBinary(reuseUploaded = false) {
  const upload = definition.nodes.find((node) => node.name === 'Upload Media');
  Object.assign(upload.parameters, { destination: 'index', indexId: id(state.indexId), idempotencyKey: `${state.runTag}:upload` });
  if (reuseUploaded) {
-  assert(state.videoId, 'A completed upload is required for resume-prepare');
+  assert(state.uploadJobId, 'A completed import job is required for resume-prepare');
   definition.nodes = definition.nodes.filter((node) => !['Fetch Media', 'Upload Media'].includes(node.name));
-  definition.nodes.push({ id: randomUUID(), name: 'Upload Media', type: 'n8n-nodes-base.code', typeVersion: 2, position: [600, 0], parameters: { mode: 'runOnceForAllItems', jsCode: `return [{json:{video:{video_id:${JSON.stringify(state.videoId)}}}}];` } });
+  definition.nodes.push({ id: randomUUID(), name: 'Upload Media', type: 'n8n-nodes-base.code', typeVersion: 2, position: [600, 0], parameters: { mode: 'runOnceForAllItems', jsCode: `return [{json:{job_id:${JSON.stringify(state.uploadJobId)}}}];` } });
   definition.connections.Configure = link('Upload Media'); delete definition.connections['Fetch Media'];
  }
  definition.nodes.find((node) => node.name === 'Start Run').parameters.idempotencyKey = `${state.runTag}:run:index`;
@@ -110,7 +110,9 @@ async function prepareBinary(reuseUploaded = false) {
  const result = await scenario(reuseUploaded ? 'Resume previous upload and durable first Wait' : 'Binary upload and durable first Wait', definition, (execution) => {
   const uploadResult = output(execution, 'Upload Media')[0]?.json;
   const runResult = output(execution, 'Start Run')[0]?.json;
-  if (uploadResult?.video?.video_id) state.videoId = uploadResult.video.video_id;
+  if (uploadResult?.job_id) state.uploadJobId = uploadResult.job_id;
+  const imported = output(execution, 'Import Media')[0]?.json;
+  if (imported?.outputs?.items?.[0]?.video_id) state.videoId = imported.outputs.items[0].video_id;
   if (runResult?.run_id) state.runId = runResult.run_id;
   assert.equal(execution.status, 'waiting', execution.data?.resultData?.error?.message || 'Expected persisted Wait state');
   assert(state.videoId && state.runId, 'Upload and processing identifiers must survive the wait');

@@ -33,6 +33,13 @@ for (const file of files) {
     assert(raw.includes('24 * 60 * 60 * 1000'), `${file}: bounded 24-hour deadline required`);
     assert(raw.includes('completed_with_failures'), `${file}: partial completion required`);
   }
+  if (file === 'native-upload-process-results.json' || file === 'native-url-import-process-results.json') {
+    for (const name of ['Import Media', 'Import Complete?', 'Import Failed?', 'Wait for Import', 'Import Timeout']) assert(names.has(name), `${file}: missing durable import lifecycle ${name}`);
+    const start = workflow.nodes.find((node) => node.name === 'Start Run');
+    assert.equal(start.parameters.target, 'import', `${file}: select the full completed import manifest`);
+    assert(start.parameters.importJobId, `${file}: import job selector required`);
+    assert.equal(start.parameters.videoIds, undefined, `${file}: never process only one page of outputs`);
+  }
   if (file === 'http-process-results.json') {
     const configure = workflow.nodes.find((node) => node.name === 'Configure');
     const requestKey = configure.parameters.assignments.assignments.find((field) => field.name === 'requestKey');

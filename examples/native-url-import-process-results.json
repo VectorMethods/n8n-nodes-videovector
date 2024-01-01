@@ -240,8 +240,8 @@
           "value": "={{ $('Configure').first().json.promptId }}",
           "__rl": true
         },
-        "target": "videos",
-        "videoIds": "={{ JSON.stringify($json.video_ids) }}"
+        "target": "import",
+        "importJobId": "={{ $('Submit Import').first().json.job_id }}"
       }
     },
     {
@@ -486,64 +486,6 @@
         "returnAll": true,
         "fullResponse": false
       }
-    },
-    {
-      "id": "import-partial",
-      "name": "Import Partial?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        950,
-        -200
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "import-partial",
-              "leftValue": "={{ $json.progress.failed > 0 }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      }
-    },
-    {
-      "id": "import-partial-note",
-      "name": "Import Partial Completion",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        1100,
-        -200
-      ],
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "import-outcome",
-              "name": "import_outcome",
-              "value": "partial; successful video_ids continue and failed_files remain in import status",
-              "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {}
-      }
     }
   ],
   "connections": {
@@ -613,7 +555,7 @@
       "main": [
         [
           {
-            "node": "Import Partial?",
+            "node": "Start Run",
             "type": "main",
             "index": 0
           }
@@ -766,35 +708,6 @@
         [
           {
             "node": "Get Run",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Import Partial?": {
-      "main": [
-        [
-          {
-            "node": "Import Partial Completion",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Start Run",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Import Partial Completion": {
-      "main": [
-        [
-          {
-            "node": "Start Run",
             "type": "main",
             "index": 0
           }
