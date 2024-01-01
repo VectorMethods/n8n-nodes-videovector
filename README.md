@@ -157,9 +157,9 @@ npm ci --ignore-scripts
 npm run verify
 npm run pack:release
 mkdir -p ../.local/n8n/packages ../.local/n8n/fixtures
-cp vectormethods-n8n-nodes-videovector-1.0.0.tgz ../.local/n8n/packages/
+cp vectormethods-n8n-nodes-videovector-1.0.1.tgz ../.local/n8n/packages/
 docker compose up -d
-docker compose exec --user node n8n sh -lc 'mkdir -p /home/node/.n8n/nodes && cd /home/node/.n8n/nodes && npm install --omit=dev --ignore-scripts --legacy-peer-deps /packages/vectormethods-n8n-nodes-videovector-1.0.0.tgz'
+docker compose exec --user node n8n sh -lc 'mkdir -p /home/node/.n8n/nodes && cd /home/node/.n8n/nodes && npm install --omit=dev --ignore-scripts --legacy-peer-deps /packages/vectormethods-n8n-nodes-videovector-1.0.1.tgz'
 docker compose restart n8n
 ```
 

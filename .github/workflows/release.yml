@@ -46,6 +46,9 @@ jobs:
     name: Build or recover immutable npm bundle
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Draft releases and their recovery assets require push access.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -127,7 +130,8 @@ jobs:
     timeout-minutes: 15
     environment: npm
     permissions:
-      contents: read
+      # The guard must read the approved draft before npm credentials are used.
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
