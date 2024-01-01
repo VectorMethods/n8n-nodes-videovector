@@ -323,10 +323,6 @@
         "queryParameters": {
           "parameters": [
             {
-              "name": "view",
-              "value": "unfiltered"
-            },
-            {
               "name": "result_level",
               "value": "segment"
             },
@@ -344,13 +340,13 @@
                 "parameters": [
                   {
                     "type": "qs",
-                    "name": "unfiltered_cursor",
-                    "value": "={{ $response.body.unfiltered?.pagination?.next_cursor || undefined }}"
+                    "name": "cursor",
+                    "value": "={{ $response.body.pagination?.next_cursor || undefined }}"
                   }
                 ]
               },
               "paginationCompleteWhen": "other",
-              "completeExpression": "={{ !$response.body.unfiltered?.pagination?.has_more }}",
+              "completeExpression": "={{ !$response.body.pagination?.has_more }}",
               "limitPagesFetched": false,
               "requestInterval": 1000
             }
@@ -368,7 +364,7 @@
         0
       ],
       "parameters": {
-        "fieldToSplitOut": "unfiltered.data",
+        "fieldToSplitOut": "data",
         "options": {}
       }
     }

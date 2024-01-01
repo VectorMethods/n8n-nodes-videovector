@@ -78,7 +78,7 @@ function polling(name, submit, get, terminal, accepted, final) {
 }
 async function setup() {
  await createIndex();
- await one('Create disposable edit/delete prompt', { resource: 'prompt', operation: 'create', name: `n8n contracts ${main.runTag}`.slice(0, 100), promptText: 'Describe the image in a concise sentence.', jsonSchema: '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}', idempotencyKey: mutationKey('prompt') }, (items) => { assert(items[0]?.json.prompt_id); state.promptId = items[0].json.prompt_id; });
+ await one('Create disposable edit/delete prompt', { resource: 'prompt', operation: 'create', videoLevel: { instructions_text: 'Summarize the whole media.', json_schema: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } }, name: `n8n contracts ${main.runTag}`.slice(0, 100), promptText: 'Describe the image in a concise sentence.', jsonSchema: '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}', idempotencyKey: mutationKey('prompt') }, (items) => { assert(items[0]?.json.prompt_id); state.promptId = items[0].json.prompt_id; });
  if (state.promptId) {
   await one('Edit disposable prompt description', { resource: 'prompt', operation: 'update', promptId: id(state.promptId), additionalFields: { description: 'n8n live edit acceptance' }, idempotencyKey: mutationKey('edit') }, (items) => assert.equal(items[0]?.json.description, 'n8n live edit acceptance'));
   await one('Clear disposable prompt description', { resource: 'prompt', operation: 'update', promptId: id(state.promptId), additionalFields: { description: '' }, idempotencyKey: mutationKey('clear') }, (items) => assert.equal(items[0]?.json.description, ''));
@@ -86,7 +86,7 @@ async function setup() {
  await one('Estimate processing with saved prompt defaults', { resource: 'run', operation: 'estimate', promptId: id(main.promptId), target: 'videos', videoIds: JSON.stringify([main.videoId]) }, (items) => assert(items.length));
 }
 async function createIndex() {
- await one('Create disposable contract-test index', { resource: 'index', operation: 'create', name: `n8n contracts ${main.runTag}`, idempotencyKey: mutationKey('index') }, (items) => { assert(items[0]?.json.index_id); state.indexId = items[0].json.index_id; });
+ await one('Create disposable contract-test index', { resource: 'index', operation: 'create', videoLevel: { instructions_text: 'Summarize the whole media.', json_schema: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } }, name: `n8n contracts ${main.runTag}`, idempotencyKey: mutationKey('index') }, (items) => { assert(items[0]?.json.index_id); state.indexId = items[0].json.index_id; });
 }
 let imageData;
 async function imageInput() {
@@ -112,7 +112,7 @@ async function imageCoverage() {
  definition.connections['Query Image'] = { main: [[{ node: 'Upload Media', type: 'main', index: 0 }]] }; delete definition.connections['Fetch Media'];
  for (const node of definition.nodes) if (node.type.startsWith('@vectormethods/n8n-nodes-videovector.')) node.credentials = { videoVectorApi: { id: credential.id, name: credential.name } };
  Object.assign(definition.nodes.find((node) => node.name === 'Upload Media').parameters, { destination: 'index', indexId: id(state.indexId), idempotencyKey: mutationKey('image') });
- Object.assign(definition.nodes.find((node) => node.name === 'Start Run').parameters, { target: 'import', additionalFields: { enable_image_embedding: true, enable_transcription: false }, idempotencyKey: mutationKey('image-run') });
+ Object.assign(definition.nodes.find((node) => node.name === 'Start Run').parameters, { target: 'import', additionalFields: { enable_image_embedding: true }, idempotencyKey: mutationKey('image-run') });
  await scenario('Extract tiny image with image embeddings', definition, (execution) => {
   state.imageVideoId = output(execution, 'Import Media')[0]?.json.outputs?.items?.[0]?.video_id;
   state.imageRunId = output(execution, 'Start Run')[0]?.json.run_id;
@@ -207,7 +207,7 @@ async function scopeCoverage() {
  await one('Estimate specific media within an index', { ...parameters, operation: 'estimate' }, (items) => assert(items.length));
  const submit = action('Start Indexed Media', { ...parameters, operation: 'start', promptSource: 'saved', idempotencyKey: mutationKey('indexed-media-run') }, credential);
  const get = action('Get Indexed Run', { resource: 'run', operation: 'get', runId: id("={{ $('Start Indexed Media').first().json.run_id }}") }, credential);
- const final = action('Indexed Media Results', { resource: 'run', operation: 'results', runId: id("={{ $('Start Indexed Media').first().json.run_id }}"), view: 'unfiltered', resultLevel: 'segment', returnAll: true }, credential);
+ const final = action('Indexed Media Results', { resource: 'run', operation: 'results', runId: id("={{ $('Start Indexed Media').first().json.run_id }}"), resultLevel: 'segment', returnAll: true }, credential);
  await scenario('Process specific indexed media through native normalized fields', polling('Indexed specific-media run', submit, get, "={{ ['completed','completed_with_failures','failed','cancelled'].includes($json.status) }}", "={{ ['completed','completed_with_failures'].includes($json.status) }}", final), (execution) => {
   state.scopedRunId = output(execution, 'Start Indexed Media')[0]?.json.run_id;
   const results = output(execution, 'Indexed Media Results'); assert(results.length); assert(results.every((item) => item.json.video_id === main.videoId));

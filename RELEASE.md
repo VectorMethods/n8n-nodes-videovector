@@ -1,3 +1,9 @@
+# 3.0.0 release changes
+
+- Require whole-media fields alongside segment fields for every prompt.
+- Remove fixed segmentation and automatic execution filtering.
+- Use one extraction result page and cursor; retain conditional search.
+
 # 2.1.0 release changes
 
 - Accept one or up to eight public HTTPS media and individual YouTube URLs without file descriptors.

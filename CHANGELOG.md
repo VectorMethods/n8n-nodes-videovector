@@ -1,3 +1,9 @@
+# 3.0.0 unified extraction contract
+
+- Require segment and whole-media schemas and extract both scopes together, including images.
+- Remove fixed segmentation, prompt selection filters, and separate whole-media execution states.
+- Return extraction results through one page and cursor; keep downstream conditional search.
+
 # Changelog
 
 ## 2.0.0 — Standalone imported parts and grounded extraction

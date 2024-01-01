@@ -1,6 +1,6 @@
 {
   "name": "@vectormethods/n8n-nodes-videovector",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "VideoVector media intelligence actions and signed event triggers for n8n",
   "keywords": [
     "n8n-community-node-package",

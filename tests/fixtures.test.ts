@@ -65,17 +65,13 @@ describe('controlled API fixture service', () => {
 		expect(fixture.report().replays).toHaveLength(1);
 	});
 
-	it('exposes independently exhausted result cursors and unavailable versus empty selection', async () => {
-		const initial = await (await call('/workflow/runs/run-1/results?view=both')).json();
-		expect(initial.filtered.pagination.has_more).toBe(false);
-		expect(initial.unfiltered.pagination).toMatchObject({ has_more: true, next_cursor: 'unfiltered:1' });
-		const next = await (await call('/workflow/runs/run-1/results?view=unfiltered&unfiltered_cursor=unfiltered:1')).json();
-		expect(next.unfiltered.data[0].segment_id).toBe('segment-2');
-		expect(next.filtered).toBeUndefined();
-		fixture.state.config.selection = 'unavailable';
-		expect(await (await call('/workflow/runs/run-1/results?view=filtered')).json()).toMatchObject({ filtered: null });
-		fixture.state.config.selection = 'empty';
-		expect(await (await call('/workflow/runs/run-1/results?view=filtered')).json()).toMatchObject({ filtered: { data: [] } });
+	it('exposes one extraction cursor and legitimate empty pages', async () => {
+		const initial = await (await call('/workflow/runs/run-1/results')).json();
+		expect(initial.pagination).toMatchObject({ has_more: true, next_cursor: 'results:1' });
+		const next = await (await call('/workflow/runs/run-1/results?cursor=results:1')).json();
+		expect(next.data[0].segment_id).toBe('segment-2');
+		fixture.state.config.resultPages = [[]];
+		expect(await (await call('/workflow/runs/run-1/results')).json()).toMatchObject({ data: [], pagination: { has_more: false } });
 	});
 
 	it('captures bytes/filename/MIME and deduplicates multipart retries despite changed boundaries', async () => {
