@@ -1,13 +1,14 @@
 # VideoVector n8n acceptance record
 
-Native nodes, credentials, examples, and release controls are implemented. **Correction batch 4 acceptance passed: 63 runtime scenarios, all five workflow imports, package checks, clean installation, and editor checks.** Real deployed API workflows, signed webhooks, credential scopes/revocation, and both MCP examples passed. npm publication and n8n catalog approval remain separate release gates.
+Native nodes, credentials, examples, and release controls are implemented. **Correction batch 4 acceptance passed: 63 runtime scenarios, all five workflow imports, package checks, clean installation, and editor checks.** Real deployed API workflows, signed webhooks, credential scopes/revocation, and both MCP examples passed. The published npm 1.0.1 package also passed installation and a live workflow smoke. Native installation on n8n Cloud remains subject to n8n catalog approval.
 
 No backend runtime code or migrations were changed. Live connector testing required correcting access to one existing connector secret, as recorded below.
 
 ## Release 1.0.1 lineage
 
-The first release attempt created the immutable 1.0.0 tag and a draft, then stopped
-at GitHub draft validation before building or publishing anything. Version 1.0.1
+The first release attempt created the 1.0.0 tag and a draft, then stopped
+at GitHub draft validation before building or publishing anything. The tag
+remains unchanged and the unpublished draft is retained. Version 1.0.1
 corrects draft-reading permissions in the build/recovery and npm publisher jobs.
 Its package version and documented tarball filename advance; native runtime source,
 workflow examples, dependencies, and node contracts are unchanged. The 1.0.0
@@ -20,10 +21,35 @@ and source/distributable scan checks. The publication-control sweep passed
 **458 tests with one existing skip**, plus mypy, Black, Ruff, actionlint, and syntax
 checks. npm 11.15.0 packed the local 1.0.1 artifact with SHA-256
 `8b5666497475419da3ecd3df4f3a22d36fd86fd9c7376ce9ed04a6b39a5dfc73`
-and SHA-1 `318a967673f2c843446be65469b84022dab48e24`. All 17 unpacked paths
-match the baseline; all nine `dist` files, five examples, and the license are
+and SHA-1 `318a967673f2c843446be65469b84022dab48e24`. The 17 unpacked paths are the same as the baseline; all nine `dist` files, five examples, and the license are
 byte-identical. Only `package.json` version and README installation tarball names
-differ. Registry artifact equality and delivery remain a separate release check.
+differ. The published npm archive exactly matches that reviewed local 1.0.1
+archive, including all 17 file paths and bytes.
+
+## Published registry delivery
+
+On 2026-10-07, [`@vectormethods/n8n-nodes-videovector@1.0.1`](https://www.npmjs.com/package/@vectormethods/n8n-nodes-videovector/v/1.0.1)
+was verified from npm against the SHA-256 and SHA-1 above. Its signed npm
+attestation and SLSA provenance bind source
+`ff84ce4b3c55a5983881b873fe83884f0dc8c6c0`, tag
+`videovector-n8n-v1.0.1`, and the company repository's GitHub-hosted release workflow.
+The package was installed by its registry name and version into the persistent
+official n8n 2.42.4 instance. After restart, [execution 358](http://localhost:5678/workflow/GWuKwcO1jLdvSB9M/executions/358)
+completed a live read and preserved linked items.
+
+[OIDC recovery 37683955859](https://github.com/VectorMethods/n8n-nodes-videovector/actions/runs/37683955859)
+reused the staged bundle, verified the existing npm version, and completed dist-tag
+cleanup without republishing. The package's trusted publisher is valid; the
+GitHub npm environment token was removed and its temporary npm token revoked.
+The registry retains version 1.0.1 as `latest`. Catalog review is a separate n8n
+process; the built-in HTTP and MCP examples work without native catalog approval.
+
+The [GitHub Release](https://github.com/VectorMethods/n8n-nodes-videovector/releases/tag/videovector-n8n-v1.0.1)
+was finalized at `2026-10-07T21:41:25Z` with `draft=false` and `immutable=true`.
+Release ID `406116703` retains the same `ff84ce4b` tag target and all three staged
+asset hashes. The finalizer verified the common successful recovery attestation,
+live registry identities, repository protections, and exact asset bytes before
+publishing. No new package version, rebuild, or republish was used for recovery.
 
 ## Runtime acceptance baseline
 
@@ -79,7 +105,7 @@ Implementation, examples, release wiring, and harnesses preceded verification. D
 | Async/error outcomes | Cancellation, failed/partial imports, retry eligibility, rate limits, deadlines retaining job IDs | Controlled coverage retained; live connector failure and empty outcome observed |
 | Editor/selectors | Chrome discovery/icons, credentials, expressions, live selectors, execution and binary preview | Corrected index discovery/estimate passed; real export 219 preview passed; read-only selector passed |
 | Examples | All five imported; native media/URL, HTTP, standalone MCP and MCP-agent examples executed live | Passed; corrected HTTP 255 and final HTTP retry suite passed |
-| Publication | Company release controls, exact approval/artifact, npm provenance, n8n submission | Pending; no public publication or catalog approval claimed |
+| Publication | npm 1.0.1 archive/provenance, registry installation, immutable GitHub Release, company controls | npm and GitHub publication passed; n8n catalog approval remains pending |
 
 ## Deployed execution evidence
 

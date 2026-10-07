@@ -1,10 +1,15 @@
 # Public release setup
 
 The public source repository is `VectorMethods/n8n-nodes-videovector`. The npm
-package is `@vectormethods/n8n-nodes-videovector`; the first planned publication is version `1.0.1`
+package is `@vectormethods/n8n-nodes-videovector`; the first published npm version is `1.0.1`
 and its release tag is `videovector-n8n-v1.0.1`. Repository setup and publication
 use the company's Public Repo Bot controls. Personal-account public pushes and
 manual npm publication are outside this release path.
+
+Version 1.0.1 is published on npm and its [GitHub Release](https://github.com/VectorMethods/n8n-nodes-videovector/releases/tag/videovector-n8n-v1.0.1)
+is immutable. The [acceptance record](docs/acceptance.md) preserves its artifact,
+registry installation, provenance, and recovery evidence. The procedures below
+also govern future source updates and releases.
 
 ## Company repository and source
 
@@ -22,9 +27,13 @@ manual npm publication are outside this release path.
    exact scanned source, and canonical governance to the owner approval digest.
 4. Retain the existing App client ID, App ID, private key, and private identity
    admission pattern in the protected environment. After approval, the App creates
-   a private company repository with no generated commit. GitHub automatically
-   grants the creating installation access. A new token scoped to that repository
-   installs the sanitized initial `main`, applies required **Node checks** and
+   a private company repository with no generated commit. Verify access through
+   the existing selected-repository App installation. If the new repository is
+   not included, an organization owner adds only that exact repository, preserving
+   existing selections and App permissions. Keep the repository private and retain
+   its creation receipt; resume through exact receipt-bound recovery without
+   deleting, recreating, or adopting an unrelated repository. A new token scoped
+   to that repository installs the sanitized initial `main`, applies required **Node checks** and
    **Secret scan**, protected `main`, create-only `videovector-n8n-v*` tag rules,
    enabled Actions/release workflow, and immutable Releases, then makes it public.
    Every token is revoked after use. The receipt records the new repository ID.
@@ -61,7 +70,7 @@ publisher values in the package settings:
 | Repository | `n8n-nodes-videovector` |
 | Workflow filename | `release.yml` |
 | Environment | `npm` |
-| Allowed actions | Direct `npm publish` and `npm dist-tag` management |
+| Allowed actions | Direct publishing, staged publishing, and `npm dist-tag` management |
 
 Create the public repository's protected **npm** environment, restricted to
 `videovector-n8n-v*` tags, before the first publication. The workflow uses
@@ -75,7 +84,10 @@ within two days. [npm trusted publishing documentation](https://docs.npmjs.com/t
 If a first package cannot yet receive a trusted publisher configuration, place
 a short-lived company npm token with access to the scope/package in the **npm**
 environment as `NPM_TOKEN`. Use the same approved release workflow for that
-first publish, then configure trusted publishing and remove the bootstrap token.
+first publish, then configure trusted publishing, remove `NPM_TOKEN` from the
+GitHub environment, verify an OIDC recovery succeeds, and revoke the temporary
+npm token. Version 1.0.1 completed that transition: its trusted publisher is valid,
+the protected environment has no npm token, and the temporary token was revoked.
 Jobs that validate or restore the approved draft have `contents: write`, because
 GitHub requires push access to read drafts. Checkout credentials are never persisted.
 The workflow builds and stages an immutable bundle before npm credentials are

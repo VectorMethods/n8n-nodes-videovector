@@ -1,9 +1,11 @@
 # n8n Creator Portal submission packet
 
 Prepared for `@vectormethods/n8n-nodes-videovector@1.0.1` on 2026-10-07.
-**Prepared, not submitted or approved.** Submit through the company creator
-account only after the company release workflow publishes the public npm
-package with provenance. Public release setup remains in [RELEASE.md](../RELEASE.md).
+**Published package; catalog approval pending.** The company release workflow
+published npm 1.0.1 with provenance and finalized its immutable GitHub Release.
+Creator Portal package validation passed; complete the company email ownership
+confirmation and final submission through the company creator account. Public
+release setup remains in [RELEASE.md](../RELEASE.md).
 
 ## Submission details
 
@@ -23,9 +25,9 @@ package with provenance. Public release setup remains in [RELEASE.md](../RELEASE
 | License | MIT |
 | Nodes | VideoVector; VideoVector Trigger |
 
-The npm and public-source links above identify the intended release. Confirm
-they resolve to the company-published version before entering this packet in
-the portal; this document does not attest that publication has occurred.
+The npm and public-source links resolve to the company-published version.
+The [acceptance record](acceptance.md) records exact registry byte equality,
+provenance, installation, and immutable release evidence.
 
 ## Description
 
@@ -78,6 +80,5 @@ verification, a public matching repository and maintainer, technical/UX
 compliance, and public documentation with authentication and examples. These
 requirements were checked against n8n's [submission instructions](https://docs.n8n.io/connect/create-nodes/deploy-your-node/submit-community-nodes.md)
 and [verification guidelines](https://docs.n8n.io/connect/create-nodes/build-your-node/reference/verification-guidelines.md).
-After the approved release, confirm the registry version, provenance, source,
-maintainer, and links, submit this package through the Creator Portal, then
+Complete ownership confirmation, submit this package through the Creator Portal, then
 record its submission identifier and review status in the release record.
