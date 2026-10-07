@@ -1,8 +1,8 @@
 # Public release setup
 
 The public source repository is `VectorMethods/n8n-nodes-videovector`. The npm
-package is `@vectormethods/n8n-nodes-videovector`; the initial version is `1.0.0`
-and its release tag is `videovector-n8n-v1.0.0`. Repository setup and publication
+package is `@vectormethods/n8n-nodes-videovector`; the first planned publication is version `1.0.1`
+and its release tag is `videovector-n8n-v1.0.1`. Repository setup and publication
 use the company's Public Repo Bot controls. Personal-account public pushes and
 manual npm publication are outside this release path.
 
@@ -43,6 +43,11 @@ from the bot's preparation receipt. Changing source, target, inputs, policy,
 or protected-main revision invalidates that approval. Use the private bot
 runbook for the full authorization procedure.
 
+The unreleased `videovector-n8n-v1.0.0` tag and draft are retained. Its workflow
+failed while reading the approved draft, before building or publishing a package.
+Version 1.0.1 corrects the GitHub permissions for that guard and leaves the native
+runtime unchanged; release tags are never moved to recover a workflow change.
+
 ## npm publication
 
 The company npm account must control the `@vectormethods` scope and have
@@ -71,6 +76,8 @@ If a first package cannot yet receive a trusted publisher configuration, place
 a short-lived company npm token with access to the scope/package in the **npm**
 environment as `NPM_TOKEN`. Use the same approved release workflow for that
 first publish, then configure trusted publishing and remove the bootstrap token.
+Jobs that validate or restore the approved draft have `contents: write`, because
+GitHub requires push access to read drafts. Checkout credentials are never persisted.
 The workflow builds and stages an immutable bundle before npm credentials are
 available; publishers and retries consume only that staged artifact.
 

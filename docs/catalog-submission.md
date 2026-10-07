@@ -1,6 +1,6 @@
 # n8n Creator Portal submission packet
 
-Prepared for `@vectormethods/n8n-nodes-videovector@1.0.0` on 2026-10-07.
+Prepared for `@vectormethods/n8n-nodes-videovector@1.0.1` on 2026-10-07.
 **Prepared, not submitted or approved.** Submit through the company creator
 account only after the company release workflow publishes the public npm
 package with provenance. Public release setup remains in [RELEASE.md](../RELEASE.md).
@@ -11,8 +11,8 @@ package with provenance. Public release setup remains in [RELEASE.md](../RELEASE
 | --- | --- |
 | Creator Portal | <https://creators.n8n.io/nodes> |
 | Package | `@vectormethods/n8n-nodes-videovector` |
-| Version | `1.0.0` |
-| npm URL | <https://www.npmjs.com/package/@vectormethods/n8n-nodes-videovector/v/1.0.0> |
+| Version | `1.0.1` |
+| npm URL | <https://www.npmjs.com/package/@vectormethods/n8n-nodes-videovector/v/1.0.1> |
 | Public source | <https://github.com/VectorMethods/n8n-nodes-videovector> |
 | Documentation | <https://vectormethods.com/docs/guides#n8n> |
 | Package README | <https://github.com/VectorMethods/n8n-nodes-videovector#readme> |

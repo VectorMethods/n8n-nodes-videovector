@@ -4,7 +4,28 @@ Native nodes, credentials, examples, and release controls are implemented. **Cor
 
 No backend runtime code or migrations were changed. Live connector testing required correcting access to one existing connector secret, as recorded below.
 
-## Current corrected artifact
+## Release 1.0.1 lineage
+
+The first release attempt created the immutable 1.0.0 tag and a draft, then stopped
+at GitHub draft validation before building or publishing anything. Version 1.0.1
+corrects draft-reading permissions in the build/recovery and npm publisher jobs.
+Its package version and documented tarball filename advance; native runtime source,
+workflow examples, dependencies, and node contracts are unchanged. The 1.0.0
+artifact below remains the runtime acceptance baseline. The final 1.0.1 build and
+registry delivery are checked against that baseline by unpacked file bytes, with
+only package version and README tarball names allowed to differ.
+
+The correction passed **132 package tests** and the full build, type, lint, example,
+and source/distributable scan checks. The publication-control sweep passed
+**458 tests with one existing skip**, plus mypy, Black, Ruff, actionlint, and syntax
+checks. npm 11.15.0 packed the local 1.0.1 artifact with SHA-256
+`8b5666497475419da3ecd3df4f3a22d36fd86fd9c7376ce9ed04a6b39a5dfc73`
+and SHA-1 `318a967673f2c843446be65469b84022dab48e24`. All 17 unpacked paths
+match the baseline; all nine `dist` files, five examples, and the license are
+byte-identical. Only `package.json` version and README installation tarball names
+differ. Registry artifact equality and delivery remain a separate release check.
+
+## Runtime acceptance baseline
 
 | Component | Version / identity |
 | --- | --- |
