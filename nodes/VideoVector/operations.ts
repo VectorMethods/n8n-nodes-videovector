@@ -17,7 +17,7 @@ function jsonValue(value: unknown, label: string): unknown {
 }
 function cleanFields(value: unknown, preserveEmptyDescription: boolean): IDataObject {
  const result: IDataObject = {};
- const jsonFields = new Set(['json_schema', 'video_level', 'semantic_indexing', 'execution_config', 'selection_filter', 'run_ids', 'index_ids', 'search_fields', 'prompt_run_ids', 'filters']);
+ const jsonFields = new Set(['json_schema', 'video_level', 'semantic_indexing', 'execution_config', 'selection_filter', 'run_ids', 'index_ids', 'search_fields', 'prompt_run_ids', 'filters', 'files']);
  for (const [key, raw] of Object.entries(record(value))) {
   if (raw === undefined || (raw === '' && !(preserveEmptyDescription && key === 'description'))) continue;
   result[key] = (jsonFields.has(key) ? jsonValue(raw, key) : raw) as IDataObject[string];
@@ -42,6 +42,7 @@ function scopeFields(ctx: IExecuteFunctions, i: number, name: string): IDataObje
    video_ids: arrayParameter(ctx, i, 'videoIds'),
    ...(name === 'target' && parameter(ctx, i, 'mediaScope', 'playground') === 'index' ? { index_id: parameter(ctx, i, 'indexId') } : {}),
   };
+  case 'import': return { import_job_id: parameter(ctx, i, 'importJobId') };
   case 'runs': return { prompt_run_ids: arrayParameter(ctx, i, 'runIds') };
   default: return {};
  }
@@ -234,16 +235,22 @@ export async function executeOperation(ctx: IExecuteFunctions, index: number): P
   else if (operation === 'get') response = await get(`/import-jobs/${pathId('jobId')}`);
   else if (operation === 'list') response = await get('/import-jobs', { ...fields, limit: ctx.getNodeParameter('limit', index, 50) as number });
   else if (operation === 'cancel') response = await post(`/import-jobs/${pathId('jobId')}/cancel`);
-  else if (operation === 'retry') response = await post(`/import-jobs/${pathId('jobId')}/retry`);
-  else if (operation === 'files') {
-   const job = record(await get(`/import-jobs/${pathId('jobId')}`));
-   if (full) return [item(job, index)];
-   if (!Array.isArray(job.video_ids)) throw new Error('Import response did not include video_ids');
+  else if (operation === 'retry') {
+   if (fields.files !== undefined && (!Array.isArray(fields.files) || !fields.files.length)) throw new Error('files must be a non-empty JSON array');
+   response = await post(`/import-jobs/${pathId('jobId')}/retry`, fields.files === undefined ? undefined : { files: fields.files });
+  }
+  else if (operation === 'files' || operation === 'sources') {
    const output: INodeExecutionData[] = [];
-   for (let offset = 0; offset < job.video_ids.length; offset += 100) {
-    const media = rows(await apiRequest.call(ctx, 'POST', '/videos/batch', { video_ids: job.video_ids.slice(offset, offset + 100) as string[] }));
-    output.push(...media.map((video) => item({ ...video, _videovector: { job_id: job.job_id, status: job.status, progress: job.progress, failed_files: job.failed_files, skipped_files: job.skipped_files } }, index)));
-   }
+   const all = ctx.getNodeParameter('returnAll', index, false) as boolean;
+   let cursor = parameter(ctx, index, 'cursor') || undefined;
+   const seen = new Set<string>();
+   do {
+    const page = record(await get(`/import-jobs/${pathId('jobId')}/${operation === 'sources' ? 'files' : 'outputs'}`, { limit: all ? 100 : ctx.getNodeParameter('limit', index, 50) as number, ...(operation === 'sources' ? { failed_only: ctx.getNodeParameter('failedOnly', index, false) as boolean } : {}), ...(cursor ? { cursor } : {}) }));
+    output.push(...emit(page, index, full, 'items'));
+    cursor = all && typeof page.next_cursor === 'string' && page.next_cursor ? page.next_cursor : undefined;
+    if (cursor && seen.has(cursor)) throw new Error('The API repeated an import outputs cursor');
+    if (cursor) seen.add(cursor);
+   } while (cursor);
    return output;
   }
  }

@@ -86,10 +86,18 @@ describe('controlled API fixture service', () => {
 			form.append('index_id', 'index-one');
 			return await fetch(`${origin}/api/v2/workflow/upload`, { method: 'POST', body: form, headers: { 'x-api-key': 'fixture', 'idempotency-key': 'upload-key' } });
 		};
-		const first = await (await upload()).json();
+		const response = await upload();
+		expect(response.status).toBe(202);
+		const first = await response.json();
+		expect(first).toMatchObject({ job_id: 'job-1', status: 'pending' });
+		expect(first.video).toBeUndefined();
 		expect(await (await upload()).json()).toEqual(first);
 		expect(fixture.report().uploads).toEqual([{ filename: 'original.mp4', mimeType: 'video/mp4', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), fields: { index_id: 'index-one' } }]);
 		expect(fixture.report().effects.media).toBe(1);
+		expect(fixture.report().effects.imports).toBe(1);
+		expect(await (await call(`/import-jobs/${first.job_id}/outputs`)).json()).toMatchObject({
+			items: [{ video_id: 'video-fixture', part_index: 0, part_count: 1 }], next_cursor: null, total: 1,
+		});
 	});
 
 	it('provides signed downloads and records accidental credential forwarding', async () => {

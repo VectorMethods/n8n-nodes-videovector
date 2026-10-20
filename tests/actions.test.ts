@@ -24,7 +24,7 @@ function context(parameters: IDataObject, overrides: Partial<IExecuteFunctions> 
 const id = (value: string) => ({ mode: 'id', value });
 const page = (data: IDataObject[], cursor: string | null = null) => ({ data, pagination: { limit: 50, has_more: !!cursor, next_cursor: cursor } });
 const api = vi.mocked(apiRequest);
-beforeEach(() => { vi.clearAllMocks(); api.mockResolvedValue({ id: 'created' }); });
+beforeEach(() => { vi.clearAllMocks(); api.mockReset(); api.mockResolvedValue({ id: 'created' }); });
 
 describe('Every action uses a canonical backend endpoint', () => {
  const cases: Array<[string, string, IDataObject, string, string, unknown?]> = [
@@ -52,13 +52,14 @@ describe('Every action uses a canonical backend endpoint', () => {
   ['search', 'sqlExecute', { query: 'SELECT * FROM scenes', fullResponse: true }, 'POST', '/search/sql/index%2Fa', { query: 'SELECT * FROM scenes' }],
   ['search', 'agentic', { query: 'What happened?', additionalFields: { session_id: 'session/a' } }, 'POST', '/chat/sessions/session%2Fa/turns', { message: 'What happened?', scope: {} }],
   ['import', 'start', {}, 'POST', '/import-jobs', { connector_id: 'connector/a', index_id: 'index/a' }],
+  ['import', 'sources', {}, 'GET', '/import-jobs/job%2Fa/files'],
   ['import', 'get', {}, 'GET', '/import-jobs/job%2Fa'], ['import', 'list', {}, 'GET', '/import-jobs'],
-  ['import', 'files', { fullResponse: true }, 'GET', '/import-jobs/job%2Fa'],
+  ['import', 'files', { fullResponse: true }, 'GET', '/import-jobs/job%2Fa/outputs'],
   ['import', 'cancel', {}, 'POST', '/import-jobs/job%2Fa/cancel'], ['import', 'retry', {}, 'POST', '/import-jobs/job%2Fa/retry'],
   ['export', 'create', { exportSource: 'index' }, 'POST', '/exports/index/index%2Fa', {}], ['export', 'get', {}, 'GET', '/exports/export%2Fa'], ['export', 'list', {}, 'GET', '/exports'],
  ];
  it.each(cases)('%s.%s', async (resource, operation, params, method, path, body) => {
-  api.mockResolvedValue({ ...page([]), prompts: [], tables: [], unfiltered: page([]) });
+  api.mockResolvedValue({ ...page([]), items: [], next_cursor: null, total: 0, prompts: [], tables: [], unfiltered: page([]) });
   const ctx = context({ resource, operation, indexId: id('index/a'), promptId: id('prompt/a'), videoId: id('video/a'), runId: id('run/a'), connectorId: id('connector/a'), segmentId: 'segment/a', retryId: 'retry/a', jobId: 'job/a', exportId: 'export/a', ...params });
   await executeOperation(ctx, 0);
   expect(api.mock.calls[0].slice(0, 2)).toEqual([method, path]);
@@ -71,6 +72,19 @@ describe('Every action uses a canonical backend endpoint', () => {
 });
 
 describe('Execution behavior', () => {
+ it('passes refreshed attachment descriptors and preserves retry identity', async () => {
+  const files = [{ file_id: 'file-3', file_name: 'meeting.mp4', download_url: 'https://files.example/meeting?cap=fresh' }];
+  await executeOperation(context({ resource: 'import', operation: 'retry', jobId: 'job-1', additionalFields: { files: JSON.stringify(files) } }), 0);
+  expect(api.mock.calls[0].slice(0, 3)).toEqual(['POST', '/import-jobs/job-1/retry', { files }]);
+  expect(api.mock.calls[0][4]).toBe('key:import.retry:');
+ });
+ it('omits refresh body for ordinary resume and rejects empty refresh arrays', async () => {
+  await executeOperation(context({ resource: 'import', operation: 'retry', jobId: 'job-1' }), 0);
+  expect(api.mock.calls[0][2]).toBeUndefined();
+  api.mockClear();
+  await expect(executeOperation(context({ resource: 'import', operation: 'retry', jobId: 'job-1', additionalFields: { files: '[]' } }), 0)).rejects.toThrow('non-empty');
+  expect(api).not.toHaveBeenCalled();
+ });
  it('preserves default processing settings by omitting all optional overrides', async () => {
   await executeOperation(context({ resource: 'run', operation: 'start', promptSource: 'instruction', instruction: 'Describe the video', target: 'playground' }), 0);
   expect(api.mock.calls[0][2]).toEqual({ prompt_instruction: 'Describe the video' });
@@ -117,13 +131,18 @@ describe('Execution behavior', () => {
   await executeOperation(context({ resource: 'search', operation: 'agentic', query: 'Summarize the evidence' }), 0);
   expect(api.mock.calls.map((call) => [call[1], call[4]])).toEqual([['/chat/sessions', 'key:search.agentic:session'], ['/chat/sessions/s/turns', 'key:search.agentic:turn']]);
  });
- it('imports media details with bounded batch requests', async () => {
-  api.mockResolvedValueOnce({ job_id: 'j', status: 'completed', progress: { imported: 101 }, video_ids: Array.from({ length: 101 }, (_, i) => `v${i}`), failed_files: [] }).mockResolvedValueOnce([{ video_id: 'v0' }]).mockResolvedValueOnce([{ video_id: 'v100' }]);
-  const output = await executeOperation(context({ resource: 'import', operation: 'files', jobId: 'j' }), 0);
-  expect(api.mock.calls[1][1]).toBe('/videos/batch');
-  expect((api.mock.calls[1][2]?.video_ids as string[]).length).toBe(100);
-  expect(api.mock.calls[2][2]).toEqual({ video_ids: ['v100'] });
-  expect(output[0].json._videovector).toMatchObject({ job_id: 'j', status: 'completed' });
+ it('retrieves every ordered part across output pages', async () => {
+  const first = Array.from({ length: 100 }, (_, part_index) => ({ video_id: `v${part_index}`, part_index, part_count: 101, source_ordinal: 0 }));
+  api.mockResolvedValueOnce({ items: first, next_cursor: 'next', total: 101 }).mockResolvedValueOnce({ items: [{ video_id: 'v100', part_index: 100, part_count: 101, source_ordinal: 0 }], next_cursor: null, total: 101 });
+  const output = await executeOperation(context({ resource: 'import', operation: 'files', jobId: 'j', returnAll: true }), 0);
+  expect(api.mock.calls[0][1]).toBe('/import-jobs/j/outputs');
+  expect(api.mock.calls[1][3]).toEqual({ limit: 100, cursor: 'next' });
+  expect(output).toHaveLength(101);
+  expect(output[100].json).toMatchObject({ video_id: 'v100', part_index: 100 });
+ });
+ it('starts processing with the full import manifest selector', async () => {
+  await executeOperation(context({ resource: 'run', operation: 'start', promptId: 'p', target: 'import', importJobId: 'j' }), 0);
+  expect(api.mock.calls[0][2]).toEqual({ prompt_id: 'p', import_job_id: 'j' });
  });
 });
 
@@ -153,7 +172,7 @@ describe('Pagination and selection', () => {
  });
  it('only offers Return All on endpoints with actual cursor pagination', () => {
   const returns = properties.filter((property) => property.name === 'returnAll');
-  expect(returns).toHaveLength(4);
+  expect(returns).toHaveLength(5);
   expect(returns.some((property) => property.displayOptions?.show?.resource?.includes('export'))).toBe(false);
  });
 });
@@ -267,4 +286,13 @@ describe('Native n8n error-envelope regressions', () => {
   expect(result[0][0].error).toBeUndefined();
   expect(result[0][0].json).toMatchObject({ customerId: 'customer-1', error: 'Rate limited', code: 'rate_limit_exceeded', statusCode: '429', requestId: 'req-3', retryAfter: '2' });
  });
+});
+
+
+it('iterates all failed source pages and preserves refresh descriptors', async () => {
+ api.mockResolvedValueOnce({ items: [{ file_id: 'first', failure: { refresh_required: true } }], next_cursor: 'last', total: 2 }).mockResolvedValueOnce({ items: [{ file_id: 'last', failure: { refresh_required: true } }], next_cursor: null, total: 2 });
+ const output = await executeOperation(context({ resource: 'import', operation: 'sources', jobId: 'job', failedOnly: true, returnAll: true }), 0);
+ expect(output.map((item) => item.json.file_id)).toEqual(['first', 'last']);
+ expect(api.mock.calls.map((call) => call[1])).toEqual(['/import-jobs/job/files', '/import-jobs/job/files']);
+ expect(api.mock.calls[1][3]).toEqual({ limit: 100, failed_only: true, cursor: 'last' });
 });

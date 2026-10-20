@@ -187,3 +187,30 @@ n8n Cloud discoverability additionally requires the n8n community verification
 submission; an npm release alone does not grant verification.
 See [release prerequisites](https://github.com/VectorMethods/n8n-nodes-videovector/blob/main/RELEASE.md) for the company repository, npm trusted
 publisher, and catalog setup required for the first public release.
+
+### Resuming attachment imports
+
+Import → Retry Attachments resumes the same failed job and reuses imported and
+staged files. If Get Import reports `refresh_required: true`, set Additional
+Fields → Refreshed Files to a JSON array of fresh descriptors for only those
+unfinished file IDs. Keep the original `file_id`, `file_name`, and `mime_type`,
+replace `download_url`, and use a new idempotency key for the changed request.
+There is no automatic retry of expired download links. Cancelling a failed
+attachment job discards retained unfinished files without deleting imported media.
+
+## Standalone parts and grounded extraction
+
+Uploads return durable import jobs. Long videos become the minimum number of
+balanced standalone parts, each at most 40 minutes. Each part has its own media
+ID, local timestamps, segments and optional whole-media output. Job phase and
+source-file counters are separate from `parts_total`, `parts_completed`, and
+`parts_failed`. Read every ordered outputs page (`next_cursor` until null).
+`video_ids` includes only the current page. Use `import_job_id` with processing
+to select the complete completed import, exclusive with `video_ids`.
+
+The optional `video_level` configuration contains only `instructions_text` and
+`json_schema`. It requires content-aware segmentation. Segment and whole-media
+fields are returned in the same media call, grounded directly in the supplied
+part; there is no later segment-text synthesis or cross-part summary.
+
+Use Import → Get Source Files with Failed Only and Return All to inspect every failed source and its refresh requirement before retrying; source-file pagination is separate from the ordered imported-parts manifest.

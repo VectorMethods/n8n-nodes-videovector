@@ -6,7 +6,7 @@ export const operationNames: Record<string, Array<[string, string, string]>> = {
  prompt: [['define', 'Define From Instructions', 'Generate a prompt from plain language'], ['create', 'Create', 'Create a prompt with a JSON schema'], ['get', 'Get', 'Get a prompt'], ['list', 'Get Many', 'List prompts'], ['update', 'Update', 'Update a prompt'], ['delete', 'Delete', 'Delete a prompt']],
  run: [['start', 'Start', 'Process media using a prompt'], ['estimate', 'Estimate', 'Estimate a saved prompt execution'], ['get', 'Get', 'Get processing status'], ['list', 'Get Many', 'List prompt runs'], ['results', 'Get Results', 'Get extracted or selected results'], ['cancel', 'Cancel', 'Cancel a run'], ['failures', 'Get Failures', 'Inspect failed segments'], ['retrySegment', 'Retry Failed Segment', 'Retry a failed segment in a finished run'], ['retryStatus', 'Get Retry Status', 'Get a segment retry status']],
  search: [['semantic', 'Semantic Search', 'Search media using plain language'], ['condition', 'Condition Search', 'Search using structured conditions'], ['image', 'Image Search', 'Find similar images'], ['multimodal', 'Multimodal Search', 'Search using text and an image'], ['sqlCatalog', 'Get SQL Catalog', 'Get available SQL tables and columns'], ['sqlGenerate', 'Generate SQL', 'Generate SQL from an instruction'], ['sqlExecute', 'Execute SQL', 'Execute a read-only SQL search'], ['agentic', 'Agentic Search', 'Ask the search agent a question']],
- import: [['start', 'Start', 'Import media from an existing storage connector'], ['get', 'Get', 'Get import status and progress'], ['list', 'Get Many', 'List import jobs'], ['files', 'Get Imported Files', 'Get media imported by a job'], ['cancel', 'Cancel', 'Cancel an import'], ['retry', 'Retry Attachments', 'Retry failed or cancelled attachment imports']],
+ import: [['start', 'Start', 'Import media from an existing storage connector'], ['get', 'Get', 'Get import status and progress'], ['list', 'Get Many', 'List import jobs'], ['files', 'Get Imported Parts', 'Get ordered standalone outputs from an import job'], ['sources', 'Get Source Files', 'Inspect source files and paginated failure details'], ['cancel', 'Cancel', 'Cancel an import'], ['retry', 'Retry Attachments', 'Resume failed attachment imports']],
  export: [['create', 'Create', 'Create an index or run export'], ['get', 'Get', 'Get export status'], ['list', 'Get Many', 'List exports'], ['download', 'Download', 'Download a completed export']],
 };
 
@@ -39,7 +39,7 @@ const executionFields: INodeProperties[] = [
 ];
 const promptFields: INodeProperties[] = [
  text('Description', 'description'),
- json('Video-Level Configuration', 'video_level', '{}', { description: 'Video-level instructions, included_segment_fields, and json_schema' }),
+ json('Video-Level Configuration', 'video_level', '{}', { description: 'Video-level instructions_text and json_schema, grounded in the same content-aware media call' }),
  json('Semantic Indexing', 'semantic_indexing', '{}'), json('Execution Defaults', 'execution_config', '{}'),
  json('Selection Filter', 'selection_filter', '{}'),
 ];
@@ -76,7 +76,9 @@ const props: INodeProperties[] = [
  id('promptId', shown('run', ['start'], { promptSource: ['saved'] })),
  id('promptId', shown('run', ['estimate'])),
  text('Instruction', 'instruction', { required: true, typeOptions: { rows: 4 }, displayOptions: shown('run', ['start'], { promptSource: ['instruction'] }) }),
- options('Target', 'target', [['index', 'Entire Index'], ['videos', 'Specific Media'], ['playground', 'Entire Playground']], 'index', { displayOptions: shown('run', ['start', 'estimate']) }),
+ options('Target', 'target', [['index', 'Entire Index'], ['videos', 'Specific Media'], ['import', 'All Parts of an Import'], ['playground', 'Entire Playground']], 'index', { displayOptions: shown('run', ['start']) }),
+ options('Target', 'target', [['index', 'Entire Index'], ['videos', 'Specific Media'], ['playground', 'Entire Playground']], 'index', { displayOptions: shown('run', ['estimate']) }),
+ text('Import Job ID', 'importJobId', { required: true, displayOptions: shown('run', ['start'], { target: ['import'] }), description: 'Completed import job. Processes its entire ordered output manifest, including all pages.' }),
  id('indexId', shown('run', ['start', 'estimate'], { target: ['index'] })),
  options('Media Location', 'mediaScope', [['playground', 'Playground'], ['index', 'Index']], 'playground', { displayOptions: shown('run', ['start', 'estimate'], { target: ['videos'] }), description: 'Location containing the selected media. All selected media must belong to this location.' }),
  id('indexId', shown('run', ['start', 'estimate'], { target: ['videos'], mediaScope: ['index'] })),
@@ -113,7 +115,9 @@ const props: INodeProperties[] = [
  additional('search', ['agentic'], [text('Session ID', 'session_id', { description: 'Reuse a conversation; omit to start a new session' }), text('Session Title', 'title'), json('Index IDs', 'index_ids', '[]'), json('Run IDs', 'prompt_run_ids', '[]')]),
  id('connectorId', shown('import', ['start'])), id('indexId', shown('import', ['start'])),
  additional('import', ['start'], [text('Source Prefix', 'source_prefix'), text('File Pattern', 'file_pattern', { default: '*' }), bool('Recursive', 'recursive', true), options('Import Mode', 'import_mode_override', [['all', 'All Files'], ['new_only', 'New Files Only']], 'new_only')]),
- text('Job ID', 'jobId', { required: true, displayOptions: shown('import', ['get', 'files', 'cancel', 'retry']) }),
+ text('Job ID', 'jobId', { required: true, displayOptions: shown('import', ['get', 'files', 'sources', 'cancel', 'retry']) }),
+ additional('import', ['retry'], [json('Refreshed Files', 'files', '', { description: 'Optional fresh download descriptors for unfinished, unstaged file IDs. Preserve file_id, file_name and mime_type; replace download_url. Use a new idempotency key when descriptors change. Imported and staged files are reused.' })]),
+ bool('Failed Only', 'failedOnly', false, { displayOptions: shown('import', ['sources']), description: 'Whether to return only failed sources, including refresh-required descriptors' }),
  additional('import', ['list'], [text('Status', 'status'), text('Index ID', 'index_id'), bool('Automation Only', 'automation_only')]),
  options('Export Source', 'exportSource', [['run', 'Run'], ['index', 'Index']], 'run', { displayOptions: shown('export', ['create']) }),
  id('runId', shown('export', ['create'], { exportSource: ['run'] })), id('indexId', shown('export', ['create'], { exportSource: ['index'] })),
@@ -122,7 +126,7 @@ const props: INodeProperties[] = [
  text('Output Binary Field', 'outputBinaryProperty', { default: 'data', required: true, displayOptions: { show: { resource: ['media', 'export'], operation: ['download'] } } }),
 ];
 for (const [resource, operations, max, extra] of [
- ['media', ['list', 'segments'], 100, {}], ['run', ['list'], 100, { listScope: ['index'] }], ['run', ['results'], 50, {}], ['search', ['semantic', 'condition'], 50, {}],
+ ['import', ['files', 'sources'], 100, {}], ['media', ['list', 'segments'], 100, {}], ['run', ['list'], 100, { listScope: ['index'] }], ['run', ['results'], 50, {}], ['search', ['semantic', 'condition'], 50, {}],
 ] as Array<[string, string[], number, Show]>) {
  props.push(bool('Return All', 'returnAll', false, { displayOptions: shown(resource, operations, extra), description: 'Whether to fetch all available pages. Search is bounded by the API snapshot result window.' }));
  props.push(number('Limit', 'limit', Math.min(50, max), max, { displayOptions: shown(resource, operations, { ...extra, returnAll: [false] }), description: resource === 'run' && operations[0] === 'results' ? 'Maximum results per selected stream' : 'Maximum number of results to return' }));

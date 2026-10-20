@@ -37,6 +37,7 @@ const defaults = () => ({
   selection: 'available', resultPages: { unfiltered: [[row(1)], [row(2)], [row(3)]], filtered: [[row(1)]] },
   searchPages: [[{ ...row(1), score: 0.9 }], [{ ...row(2), score: 0.8 }]],
 });
+const importOutputs = (videoId = 'video-fixture', fileName = 'fixture.mp4') => ({ items: [{ file_id: 'file-fixture', file_name: fileName, source_ordinal: 0, part_index: 0, part_count: 1, source_start_seconds: 0, source_end_seconds: 1, video_id: videoId, title: fileName, status: 'completed' }], next_cursor: null, total: 1 });
 const digest = (data) => createHash('sha256').update(data).digest('hex');
 const withoutSecret = ({ secret: _secret, ...rest }) => rest;
 const redact = (value) => {
@@ -189,7 +190,7 @@ export function createFixtureServer(initialConfig = {}) {
       if (path === '/workflow/upload' && method === 'POST') {
         state.uploads.push(upload);
         const video = create('media', { index_id: upload.fields.index_id ?? 'index-fixture', title: upload.filename, filename: upload.filename, status: 'ready', media_type: 'video', message: 'Fixture upload complete', video_uri: 'fixture://media' }, 'video');
-        success({ video, destination: { type: 'index', index_id: video.index_id, index_created: false } }, 201); return;
+        success(create('imports', { status: 'pending', phase: 'queued', target_index_id: video.index_id, outputs: importOutputs(video.video_id, upload.filename), video_ids: [video.video_id] }, 'job'), 202); return;
       }
       if (path === '/workflow/define' && method === 'POST') {
         const prompt = create('prompts', { name: 'Fixture extraction', ...body, status: 'ready' }, 'prompt');
@@ -228,7 +229,8 @@ export function createFixtureServer(initialConfig = {}) {
       if (path === '/workflow/media-grants' && method === 'POST') { success({ video_id: body.video_id, url: downloadUrl(body.video_id), filename: state.config.download?.filename ?? 'fixture.bin', mime_type: state.config.download?.mimeType ?? 'application/octet-stream' }); return; }
       if ((path === '/workflow/attachments' || path === '/import-jobs') && method === 'POST') { success(create('imports', { ...body, status: 'completed' }, 'job'), 202); return; }
       if (path === '/import-jobs' && method === 'GET') { success(state.resources.imports); return; }
-      if ((match = path.match(/^\/import-jobs\/([^/]+)$/))) { success({ job_id: match[1], status: advanceStatus(match[1]), video_ids: ['video-fixture'], progress: { completed: 1, total: 1 }, failed_files: [], skipped_files: [] }); return; }
+      if ((match = path.match(/^\/import-jobs\/([^/]+)$/))) { success({ job_id: match[1], status: advanceStatus(match[1]), video_ids: ['video-fixture'], phase: 'publishing', outputs: importOutputs(), progress: { total_files: 1, imported: 1, failed: 0, skipped: 0, bytes_transferred: 1, parts_total: 1, parts_completed: 1, parts_failed: 0 }, failed_files: [], skipped_files: [] }); return; }
+      if ((match = path.match(/^\/import-jobs\/([^/]+)\/outputs$/))) { success(importOutputs()); return; }
       if (path === '/videos/batch' && method === 'POST') { success((body.video_ids ?? []).map((video_id) => ({ video_id, status: 'ready', filename: 'fixture.bin' }))); return; }
       if ((match = path.match(/^\/exports\/([^/]+)\/download-url$/)) && method === 'POST') { success({ export_id: match[1], status: 'completed', download_url: downloadUrl(match[1]), expires_in: 900 }); return; }
       if (/^\/exports\/(index|prompt-run)\//.test(path) && method === 'POST') { success(create('exports', { ...body, status: 'completed' }, 'export'), 202); return; }

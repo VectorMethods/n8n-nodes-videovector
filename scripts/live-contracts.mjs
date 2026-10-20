@@ -112,9 +112,9 @@ async function imageCoverage() {
  definition.connections['Query Image'] = { main: [[{ node: 'Upload Media', type: 'main', index: 0 }]] }; delete definition.connections['Fetch Media'];
  for (const node of definition.nodes) if (node.type.startsWith('@vectormethods/n8n-nodes-videovector.')) node.credentials = { videoVectorApi: { id: credential.id, name: credential.name } };
  Object.assign(definition.nodes.find((node) => node.name === 'Upload Media').parameters, { destination: 'index', indexId: id(state.indexId), idempotencyKey: mutationKey('image') });
- Object.assign(definition.nodes.find((node) => node.name === 'Start Run').parameters, { target: 'videos', mediaScope: 'index', indexId: id(state.indexId), additionalFields: { enable_image_embedding: true, enable_transcription: false }, idempotencyKey: mutationKey('image-run') });
+ Object.assign(definition.nodes.find((node) => node.name === 'Start Run').parameters, { target: 'import', additionalFields: { enable_image_embedding: true, enable_transcription: false }, idempotencyKey: mutationKey('image-run') });
  await scenario('Extract tiny image with image embeddings', definition, (execution) => {
-  state.imageVideoId = output(execution, 'Upload Media')[0]?.json.video?.video_id;
+  state.imageVideoId = output(execution, 'Import Media')[0]?.json.outputs?.items?.[0]?.video_id;
   state.imageRunId = output(execution, 'Start Run')[0]?.json.run_id;
   assert(output(execution, 'Get Results').length, execution.data?.resultData?.error?.message || 'Expected extracted image result');
  });

@@ -76,7 +76,7 @@ await scenario('Stored mp4 upload preserves bytes and filename', {}, workflow('S
   assert.equal(report.uploads[0].bytes, sample.length);
   assert.equal(report.uploads[0].filename, 'sample.mp4');
   assert.equal(report.uploads[0].mimeType, 'video/mp4');
-  assert(output(execution, 'Upload Media')[0]?.json.video?.video_id);
+  assert(output(execution, 'Upload Media')[0]?.json.job_id);
 });
 const inline = {
   id: randomUUID(), name: 'Inline Media', type: 'n8n-nodes-base.code', typeVersion: 2, position: [240, 220],
@@ -117,33 +117,33 @@ for (const resource of ['media', 'export']) {
   });
 }
 const partialImport = {
-  job_id: 'job-1', status: 'completed', source_kind: 'attachments', video_ids: ['video-fixture'],
-  progress: { total_files: 2, imported: 1, failed: 1, skipped: 0, bytes_transferred: sample.length },
+  job_id: 'job-1', status: 'failed', source_kind: 'attachments', video_ids: ['video-fixture'],
+  progress: { total_files: 2, imported: 1, failed: 1, skipped: 0, bytes_transferred: sample.length, parts_total: 1, parts_completed: 1, parts_failed: 0 },
+  outputs: { items: [{ file_id: 'good', file_name: 'good.mp4', source_ordinal: 0, part_index: 0, part_count: 1, source_start_seconds: 0, source_end_seconds: 1, video_id: 'video-fixture', title: 'good.mp4', status: 'completed' }], next_cursor: null, total: 1 },
   failed_files: [{ path: 'failed.mp4', error: 'Controlled source unavailable' }], skipped_files: [],
 };
 const failedImport = {
-  ...partialImport, status: 'failed', video_ids: [], error_message: 'All sources failed',
+  ...partialImport, status: 'failed', video_ids: [], outputs: { items: [], next_cursor: null, total: 0 }, error_message: 'All sources failed',
   progress: { total_files: 2, imported: 0, failed: 2, skipped: 0, bytes_transferred: 0 },
 };
-const importResponse = (body) => ({ failures: [{ method: 'GET', path: '/import-jobs/job-1', status: 200, body, repeat: true }] });
+const importResponse = (body) => ({ failures: [{ method: 'GET', path: '/import-jobs/job-1', status: 200, body, repeat: true }, { method: 'GET', path: '/import-jobs/job-1/outputs', status: 200, body: body.outputs, repeat: true }] });
 await scenario('Partial import files retain successful media and failure details', importResponse(partialImport), workflow('Partial import files', [native('Imported Files', { resource: 'import', operation: 'files', jobId: 'job-1' })]), async (execution, evidence) => {
   requireSuccess(execution);
   const items = output(execution, 'Imported Files');
   evidence.items = items.map((item) => item.json);
   assert.equal(items.length, 1);
   assert.equal(items[0].json.video_id, 'video-fixture');
-  assert.equal(items[0].json._videovector.job_id, 'job-1');
-  assert.equal(items[0].json._videovector.progress.failed, 1);
-  assert.deepEqual(items[0].json._videovector.failed_files, partialImport.failed_files);
+  assert.equal(items[0].json.part_index, 0);
+  assert.equal(items[0].json.part_count, 1);
 });
 await scenario('Failed import full response preserves identity and source failures', importResponse(failedImport), workflow('Failed import details', [native('Import Details', { resource: 'import', operation: 'files', jobId: 'job-1', fullResponse: true })]), async (execution, evidence) => {
   requireSuccess(execution);
   evidence.job = output(execution, 'Import Details')[0]?.json;
-  assert.deepEqual(evidence.job, failedImport);
+  assert.deepEqual(evidence.job, failedImport.outputs);
   const report = await control('report');
   assert.equal(report.counts['POST /videos/batch'], undefined);
 });
-for (const [label, job, expected] of [['partial', partialImport, 'success'], ['failed', failedImport, 'error']]) {
+for (const [label, job, expected] of [['partial', partialImport, 'error'], ['failed', failedImport, 'error']]) {
   const definition = JSON.parse(await readFile(resolve(root, 'examples/native-url-import-process-results.json'), 'utf8'));
   definition.name = `VideoVector QA · Native URL template ${label} import`;
   definition.nodes.find((node) => node.name === 'Manual Trigger').name = 'Start';
@@ -157,19 +157,11 @@ for (const [label, job, expected] of [['partial', partialImport, 'success'], ['f
   }
   await scenario(`Native URL template handles ${label} import`, { ...importResponse(job), statusSequence: ['completed'] }, definition, async (execution, evidence) => {
     evidence.import = output(execution, 'Import Media')[0]?.json;
-    evidence.branch = output(execution, 'Import Partial Completion')[0]?.json?.import_outcome;
     evidence.error = execution.data?.resultData?.error?.message;
     assert.equal(execution.status, expected, evidence.error || `Unexpected ${label} import status`);
     const report = await control('report');
-    if (label === 'partial') {
-      assert(evidence.branch?.includes('partial'));
-      const submit = report.calls.find((call) => call.method === 'POST' && call.routePath === '/workflow/process');
-      assert.deepEqual(submit.body.video_ids, partialImport.video_ids);
-      assert(output(execution, 'Get Results').length > 0);
-    } else {
-      assert.match(evidence.error, /job-1/);
-      assert.equal(report.counts['POST /workflow/process'], undefined, 'Failed import must not start a run');
-    }
+    assert.match(evidence.error, /job-1/);
+    assert.equal(report.counts['POST /workflow/process'], undefined, 'Incomplete import must not start a run');
   });
 }
 await save();
