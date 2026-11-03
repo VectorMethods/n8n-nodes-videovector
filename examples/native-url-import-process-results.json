@@ -60,8 +60,9 @@
       "parameters": {
         "resource": "media",
         "operation": "importUrls",
-        "files": "={{ JSON.stringify([{download_url:$json.mediaUrl,file_id:'n8n-source-media'}]) }}",
-        "destination": "playground"
+        "destination": "playground",
+        "urlSource": "urls",
+        "urls": "={{ [$json.mediaUrl] }}"
       }
     },
     {

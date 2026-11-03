@@ -55,11 +55,17 @@ Successful items stay on the regular output.
 
 For uploads, pass an n8n binary property (default `data`) from Google Drive,
 S3, HTTP Request, or another source node. No local filesystem path is needed.
-For public or signed URLs, use Import URLs with a JSON array:
+Uploads stream directly to the granted resumable storage session, with up to
+three input items transferring concurrently. Their ordered outputs remain import jobs.
+For public HTTPS media or individual YouTube URLs, use **Import URLs → URLs**.
+Paste one URL per line, or use an expression returning a string or an array:
 
 ```json
-[{"download_url":"https://example.com/video.mp4","file_id":"source-object-id","file_name":"video.mp4"}]
+["https://example.com/video.mp4", "https://www.youtube.com/watch?v=VIDEO_ID"]
 ```
+
+Each submission accepts up to eight URLs. Existing workflows using **File Descriptors**
+keep their existing source identity and signed-download contract.
 
 The server fetches the URLs. Private sources should supply a signed download
 URL with enough lifetime for import, or download to n8n binary and use Upload.
@@ -77,7 +83,7 @@ configuration values, and activate only after a manual run:
 - [Upload binary → process → results](examples/native-upload-process-results.json)
 - [Import URL → wait for import → process → results](examples/native-url-import-process-results.json)
 - [Built-in HTTP Request → process → results](examples/http-process-results.json)
-- [Built-in MCP Client → list indexes, without a model](examples/mcp-list-indexes.json)
+- [Built-in MCP Client → browse indexes, without a model](examples/mcp-browse-indexes.json)
 - [AI agent with the hosted MCP tools](examples/mcp-agent.json)
 
 Templates use the native **Wait** node for 65 seconds between status requests.
@@ -136,10 +142,12 @@ processing stays limited to that selected media.
 
 The hosted MCP endpoint is `https://api.vectormethods.com/mcp`. To call a tool
 directly, use the built-in **MCP Client** with streamable HTTP and the same
-`X-API-Key` Header Auth credential. The [standalone MCP template](examples/mcp-list-indexes.json)
-calls the read-only `list_indexes` tool with `include_defaults: true`; it needs
+`X-API-Key` Header Auth credential. The [standalone MCP template](examples/mcp-browse-indexes.json)
+calls the read-only `browse` tool with `{"resource":"indexes"}`; it needs
 only your VideoVector credential. Its output keeps the MCP `structuredContent`
-object, including `user_indexes` and `default_indexes`.
+object with `resource`, `entries`, `pagination`, and `next_action`. The entries
+are one page, not a total account count. If `pagination.has_more` is true, call
+`browse` again with the same resource and `pagination.next_cursor` as `cursor`.
 
 For conversational tool selection, use **MCP Client Tool** connected to an AI
 Agent. The [agent template](examples/mcp-agent.json) also requires a credential

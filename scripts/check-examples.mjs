@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 const directory = new URL('../examples/', import.meta.url);
 const files = (await readdir(directory)).filter((name) => name.endsWith('.json'));
-for (const required of ['native-upload-process-results.json', 'native-url-import-process-results.json', 'http-process-results.json', 'mcp-agent.json', 'mcp-list-indexes.json']) {
+for (const required of ['native-upload-process-results.json', 'native-url-import-process-results.json', 'http-process-results.json', 'mcp-agent.json', 'mcp-browse-indexes.json']) {
   assert(files.includes(required), `Missing shipped example ${required}`);
 }
 for (const file of files) {
@@ -48,7 +48,7 @@ for (const file of files) {
     const header = submit.parameters.headerParameters.parameters.find((field) => field.name.toLowerCase() === 'idempotency-key');
     assert.equal(header?.value, "={{ $('Configure').first().json.requestKey }}", `${file}: Retry Execution must reuse the saved submission identity`);
   }
-  if (file === 'mcp-list-indexes.json') {
+  if (file === 'mcp-browse-indexes.json') {
     assert.equal(workflow.nodes.length, 2, `${file}: standalone MCP requires only a trigger and MCP Client`);
     const client = workflow.nodes.find((node) => node.type === '@n8n/n8n-nodes-langchain.mcpClient');
     assert(client, `${file}: use the built-in standalone MCP Client`);
@@ -56,13 +56,19 @@ for (const file of files) {
     assert.equal(client.parameters.endpointUrl, 'https://api.vectormethods.com/mcp');
     assert.equal(client.parameters.authentication, 'headerAuth');
     assert.equal(client.parameters.serverTransport, 'httpStreamable');
-    assert.equal(client.parameters.tool.value, 'list_indexes');
+    assert.equal(client.parameters.tool.value, 'browse');
     assert.equal(client.parameters.inputMode, 'json');
-    assert.equal(client.parameters.jsonInput, '={{ {include_defaults: true} }}');
+    assert.deepEqual(JSON.parse(client.parameters.jsonInput), { resource: 'indexes' });
   }
   if (file === 'mcp-agent.json') {
     assert(workflow.nodes.some((node) => node.type === '@n8n/n8n-nodes-langchain.mcpClientTool'));
     assert(workflow.nodes.some((node) => node.type === '@n8n/n8n-nodes-langchain.lmChatOpenAi'), `${file}: agent template retains its explicit model connection`);
+    const instructions = workflow.nodes.find((node) => node.type === '@n8n/n8n-nodes-langchain.agent').parameters.options.systemMessage;
+    for (const name of ['analyze', 'get_analysis', 'search', 'import_media', 'save_prompt', 'browse']) assert(instructions.includes(name), `${file}: current tool guidance missing ${name}`);
+    assert(instructions.includes('search_id and an optional cursor'), `${file}: saved searches require their original identity`);
+    assert(instructions.includes('Continue until terminal status or required user input, subject to user interruption and host limits'), `${file}: agent must own the task lifecycle within host limits`);
+    assert(instructions.includes('Never ask the user to poll'), `${file}: agent must handle polling`);
+    assert(instructions.includes('download requested segment clips using the supplied links'), `${file}: agent should use included clip links`);
   }
 }
 console.log(`Validated ${files.length} importable workflow examples`);

@@ -30,7 +30,7 @@ try {
   // are the same as the shipped Chat Trigger example.
   const trigger = definition.nodes.find((node) => node.name === 'Chat Trigger');
   Object.assign(trigger, { name: 'Start', type: 'n8n-nodes-base.manualTrigger', typeVersion: 1, parameters: {} });
-  const input = itemsNode([{ chatInput: 'Call the list_indexes tool once with include_defaults true. Return only a sentence with the total number of indexes. Do not create, update, or delete anything.' }]);
+  const input = itemsNode([{ chatInput: 'Call browse once with resource indexes. Return only a sentence with the number of entries in this page and whether pagination.has_more says more pages are available. Do not claim this page is the total account count. Do not create, update, or delete anything.' }]);
   definition.nodes.push(input);
   delete definition.connections['Chat Trigger'];
   definition.connections.Start = { main: [[{ node: input.name, type: 'main', index: 0 }]] };
@@ -40,7 +40,7 @@ try {
     parameters: { projectId: { __rl: true, mode: 'id', value: env.CHAT_AGENT_VERTEX_PROJECT || account.project_id }, modelName: model, location: region, options: { maxOutputTokens: 2048, temperature: 0 } },
     credentials: { googleApi: { id: modelCredential.id, name: modelCredential.name } } });
   const tool = definition.nodes.find((node) => node.name === 'VideoVector MCP');
-  tool.parameters.include = 'selected'; tool.parameters.includeTools = ['list_indexes'];
+  tool.parameters.include = 'selected'; tool.parameters.includeTools = ['browse'];
   tool.credentials = { httpHeaderAuth: { id: client.state.httpCredential.id, name: client.state.httpCredential.name } };
   definition.nodes.find((node) => node.name === 'VideoVector Agent').parameters.options.returnIntermediateSteps = true;
   const workflow = await client.createWorkflow(definition); result.workflowId = workflow.id;
@@ -51,7 +51,10 @@ try {
   const answer = output(execution, 'VideoVector Agent')[0]?.json;
   assert(typeof answer?.output === 'string' && answer.output.trim(), 'Agent must return an answer');
   const steps = answer.intermediateSteps || [];
-  assert(steps.some((step) => step.action?.tool === 'VideoVector_MCP_list_indexes'), 'Agent must actually call the hosted MCP tool');
+  const browseStep = steps.find((step) => step.action?.tool === 'VideoVector_MCP_browse');
+  assert(browseStep, 'Agent must actually call the hosted browse tool');
+  const arguments_ = typeof browseStep.action.toolInput === 'string' ? JSON.parse(browseStep.action.toolInput) : browseStep.action.toolInput;
+  assert.equal(arguments_?.resource, 'indexes', 'Agent must select the requested browse resource');
   result.output = { modelProvider: 'Google Vertex Chat Model', model, toolCalls: steps.map((step) => step.action?.tool), hasAnswer: true };
 } catch (error) { result.status = 'failed'; result.error = error.message; }
 await mkdir(resolve(root, '.reports'), { recursive: true });

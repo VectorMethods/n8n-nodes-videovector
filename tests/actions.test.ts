@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NodeApiError } from 'n8n-workflow';
+import { NodeApiError, sleep } from 'n8n-workflow';
 import type { IDataObject, IExecuteFunctions, ILoadOptionsFunctions, INodeExecutionData } from 'n8n-workflow';
 
 vi.mock('../nodes/VideoVector/transport', async (importOriginal) => ({ ...(await importOriginal<typeof import('../nodes/VideoVector/transport')>()), apiRequest: vi.fn(), operationKey: vi.fn((_index, operation, suffix) => `key:${operation}:${suffix ?? ''}`), uploadBinary: vi.fn(), downloadBinary: vi.fn() }));
@@ -27,6 +27,15 @@ const api = vi.mocked(apiRequest);
 beforeEach(() => { vi.clearAllMocks(); api.mockReset(); api.mockResolvedValue({ id: 'created' }); });
 
 describe('Every action uses a canonical backend endpoint', () => {
+ it.each([
+  ['https://media.example/a.mp4', 'https://media.example/a.mp4'],
+  ['https://youtu.be/example\nhttps://media.example/b.mp4', ['https://youtu.be/example', 'https://media.example/b.mp4']],
+  [['https://media.example/a.mp4', 'https://media.example/b.mp4'], ['https://media.example/a.mp4', 'https://media.example/b.mp4']],
+ ])('forwards plain URL input without downloading: %j', async (urls, expected) => {
+  await executeOperation(context({ resource: 'media', operation: 'importUrls', urls, destination: 'playground' }), 0);
+  expect(api).toHaveBeenCalledWith('POST', '/workflow/attachments', { urls: expected }, undefined, 'key:media.importUrls:');
+  expect(uploadBinary).not.toHaveBeenCalled();
+ });
  const cases: Array<[string, string, IDataObject, string, string, unknown?]> = [
   ['index', 'create', { name: 'Automated library' }, 'POST', '/indexes', { name: 'Automated library' }],
   ['index', 'get', {}, 'GET', '/indexes/index%2Fa'], ['index', 'list', {}, 'GET', '/indexes', undefined],
@@ -178,6 +187,21 @@ describe('Pagination and selection', () => {
 });
 
 describe('Binary contract', () => {
+ it('uploads at most three input items concurrently and preserves paired output order', async () => {
+  let active = 0; let peak = 0;
+  vi.mocked(uploadBinary).mockImplementation(async index => {
+   active++; peak = Math.max(peak, active);
+   await sleep(index % 2 ? 1 : 5);
+   active--;
+   return { job_id: `job-${index}`, status: 'pending' };
+  });
+  const items = Array.from({ length: 7 }, () => ({ json: {} }));
+  const output = await new VideoVector().execute.call(context({ resource: 'media', operation: 'upload', destination: 'playground' }, {}, items));
+  expect(peak).toBe(3); expect(active).toBe(0);
+  expect(output[0].map(item => item.pairedItem)).toEqual(items.map((_, index) => ({ item: index })));
+  expect(output[0].map(item => item.json.job_id)).toEqual(items.map((_, index) => `job-${index}`));
+ });
+
  it('uploads the configured binary property with destination and stable operation identity', async () => {
   vi.mocked(uploadBinary).mockResolvedValue({ video: { video_id: 'v' }, destination: { type: 'index' } });
   const output = await executeOperation(context({ resource: 'media', operation: 'upload', binaryProperty: 'clip', destination: 'newIndex', indexName: 'Library', additionalFields: { title: 'A clip' } }), 0);

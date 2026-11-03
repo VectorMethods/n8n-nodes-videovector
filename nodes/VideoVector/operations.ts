@@ -35,6 +35,17 @@ function arrayParameter(ctx: IExecuteFunctions, i: number, name: string): IDataO
  if (!Array.isArray(value) || !value.length) throw new Error(`${name} must be a non-empty JSON array`);
  return value as IDataObject[string];
 }
+function urlImportSource(ctx: IExecuteFunctions, i: number): IDataObject {
+ const raw = ctx.getNodeParameter('urls', i, '');
+ const descriptorSource = parameter(ctx, i, 'urlSource', '') === 'files';
+ // Saved workflows used descriptor files before the plain-URL field existed.
+ if (descriptorSource || raw === '') return { files: arrayParameter(ctx, i, 'files') };
+ const urls = typeof raw === 'string' ? raw.split(/\r?\n/).map(url => url.trim()).filter(Boolean) : raw;
+ if (!Array.isArray(urls) || urls.length < 1 || urls.length > 8 || urls.some(url => typeof url !== 'string' || !url.trim())) {
+  throw new Error('urls must contain between 1 and 8 URLs');
+ }
+ return { urls: urls.length === 1 ? urls[0] : urls };
+}
 function scopeFields(ctx: IExecuteFunctions, i: number, name: string): IDataObject {
  switch (parameter(ctx, i, name, 'index')) {
   case 'index': return { index_id: parameter(ctx, i, 'indexId') };
@@ -146,7 +157,7 @@ export async function executeOperation(ctx: IExecuteFunctions, index: number): P
  }
  if (resource === 'media') {
   if (operation === 'upload') response = await uploadBinary.call(ctx, index, parameter(ctx, index, 'binaryProperty', 'data'), { ...destination(ctx, index), ...fields }, key());
-  else if (operation === 'importUrls') response = await post('/workflow/attachments', { ...destination(ctx, index), ...fields, files: arrayParameter(ctx, index, 'files') });
+  else if (operation === 'importUrls') response = await post('/workflow/attachments', { ...destination(ctx, index), ...fields, ...urlImportSource(ctx, index) });
   else if (operation === 'get') response = await get(`/videos/${pathId('videoId')}`);
   else if (operation === 'delete') response = await apiRequest.call(ctx, 'DELETE', `/videos/${pathId('videoId')}`, undefined, undefined, key());
   else if (operation === 'deletionStatus') response = await get(`/videos/${pathId('videoId')}/deletion`);
