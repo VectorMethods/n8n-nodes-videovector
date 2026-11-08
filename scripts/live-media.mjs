@@ -76,10 +76,10 @@ async function independentReads() {
 }
 async function prepare() {
  await independentReads();
- await one('Create dedicated live index', { resource: 'index', operation: 'create', name: `n8n live ${state.runTag}`, idempotencyKey: `${state.runTag}:index` }, (items) => {
+ await one('Create dedicated live index', { resource: 'index', operation: 'create', videoLevel: { instructions_text: 'Summarize the whole media.', json_schema: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } }, name: `n8n live ${state.runTag}`, idempotencyKey: `${state.runTag}:index` }, (items) => {
   assert(items[0]?.json.index_id, 'Index response must include index_id'); state.indexId = items[0].json.index_id;
  });
- await one('Create extraction prompt from schema', { resource: 'prompt', operation: 'create', name: `n8n live ${state.runTag}`.slice(0, 100), promptText: 'Describe the visible scene in one concise sentence. Return the summary field.', jsonSchema: '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"],"additionalProperties":false}', additionalFields: { execution_config: '{"video_segmentation_type":"fixed","audio_segmentation_type":"fixed","video_segment_duration":10,"audio_segment_duration":10,"enable_transcription":false,"enable_image_embedding":false}' }, idempotencyKey: `${state.runTag}:prompt` }, (items) => {
+ await one('Create extraction prompt from schema', { resource: 'prompt', operation: 'create', videoLevel: { instructions_text: 'Summarize the whole media.', json_schema: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } }, name: `n8n live ${state.runTag}`.slice(0, 100), promptText: 'Describe the visible scene in one concise sentence. Return the summary field.', jsonSchema: '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"],"additionalProperties":false}', additionalFields: { execution_config: '{"enable_image_embedding":false}' }, idempotencyKey: `${state.runTag}:prompt` }, (items) => {
   assert(items[0]?.json.prompt_id, 'Prompt response must include prompt_id'); state.promptId = items[0].json.prompt_id;
  });
  await one('Define prompt from plain language', { resource: 'prompt', operation: 'define', instruction: 'Describe the visible scene in a short text field called summary.', additionalFields: { save: false }, idempotencyKey: `${state.runTag}:define` }, (items) => assert(items[0]?.json.definition, 'Definition response missing'));
@@ -188,9 +188,8 @@ async function finish() {
   await one('List run segments', { resource: 'media', operation: 'segments', videoId: id(state.videoId), additionalFields: { run_id: state.runId }, returnAll: true });
  }
  if (state.runId) {
-  await one('Get both extraction streams', { resource: 'run', operation: 'results', runId: id(state.runId), view: 'both', resultLevel: 'segment', returnAll: true, fullResponse: true }, (items) => {
-   assert(items.some((entry) => entry.json.unfiltered?.data?.length), 'Unfiltered results missing');
-   assert(items.every((entry) => 'selection_summary' in entry.json), 'Selection status must be retained');
+  await one('Get extraction results', { resource: 'run', operation: 'results', runId: id(state.runId), resultLevel: 'segment', returnAll: true, fullResponse: true }, (items) => {
+   assert(items.some((entry) => entry.json.data?.length), 'Extraction results missing');
   });
   await one('Inspect run failure manifest', { resource: 'run', operation: 'failures', runId: id(state.runId) });
   await one('Semantic search with snapshot pages', { resource: 'search', operation: 'semantic', searchScope: 'runs', runIds: JSON.stringify([state.runId]), query: 'Describe the visible scene', resultLevel: 'segment', returnAll: true, fullResponse: true }, (items) => assert(items[0]?.json.pagination, 'Search pagination envelope missing'));

@@ -483,7 +483,6 @@
           "__rl": true
         },
         "resultLevel": "segment",
-        "view": "unfiltered",
         "returnAll": true,
         "fullResponse": false
       }

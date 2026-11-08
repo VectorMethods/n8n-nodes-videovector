@@ -30,18 +30,12 @@ const bool = (displayName: string, name: string, defaultValue = false, extra: Pa
 const number = (displayName: string, name: string, defaultValue: number, max: number, extra: Partial<INodeProperties> = {}) => field(displayName, name, 'number', defaultValue, { typeOptions: { minValue: 1, maxValue: max }, ...extra });
 const id = (name: string, show: INodeProperties['displayOptions']) => locator({ indexId: 'Index', promptId: 'Prompt', videoId: 'Media', runId: 'Run', connectorId: 'Connector' }[name]!, name, { indexId: 'listIndexes', promptId: 'listPrompts', videoId: 'listMedia', runId: 'listRuns', connectorId: 'listConnectors' }[name]!, show);
 const executionFields: INodeProperties[] = [
- options('Video Segmentation', 'video_segmentation_type', [['content_aware', 'Content Aware'], ['fixed', 'Fixed Duration']], 'content_aware'),
- options('Audio Segmentation', 'audio_segmentation_type', [['content_aware', 'Content Aware'], ['fixed', 'Fixed Duration']], 'content_aware'),
- number('Video Segment Duration', 'video_segment_duration', 10, 300, { description: 'Fixed segment duration in seconds' }),
- number('Audio Segment Duration', 'audio_segment_duration', 10, 300, { description: 'Fixed segment duration in seconds' }),
  text('Processing Model', 'processing_model', { description: 'Model ID from the VideoVector pricing settings' }),
- bool('Enable Transcription', 'enable_transcription', true), bool('Enable Image Embeddings', 'enable_image_embedding', true),
+ bool('Enable Image Embeddings', 'enable_image_embedding', true),
 ];
 const promptFields: INodeProperties[] = [
  text('Description', 'description'),
- json('Video-Level Configuration', 'video_level', '{}', { description: 'Video-level instructions_text and json_schema, grounded in the same content-aware media call' }),
  json('Semantic Indexing', 'semantic_indexing', '{}'), json('Execution Defaults', 'execution_config', '{}'),
- json('Selection Filter', 'selection_filter', '{}'),
 ];
 function additional(resource: string, operations: string[], fields: INodeProperties[]): INodeProperties {
  return field('Additional Fields', 'additionalFields', 'collection', {}, { placeholder: 'Add Field', displayOptions: shown(resource, operations), options: fields });
@@ -70,9 +64,10 @@ const props: INodeProperties[] = [
  text('Name', 'name', { required: true, displayOptions: shown('prompt', ['create']) }),
  text('Prompt Text', 'promptText', { required: true, typeOptions: { rows: 4 }, displayOptions: shown('prompt', ['create']) }),
  json('JSON Schema', 'jsonSchema', '{"type":"object","properties":{"description":{"type":"string"}},"required":["description"]}', { required: true, displayOptions: shown('prompt', ['create']) }),
+ json('Whole-Media Configuration', 'videoLevel', '{"instructions_text":"Describe the whole media","json_schema":{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}}', { required: true, displayOptions: shown('prompt', ['create']), description: 'Required instructions_text and json_schema for whole-media fields extracted together with segment fields' }),
  additional('prompt', ['create'], promptFields),
  id('promptId', shown('prompt', ['get', 'update', 'delete'])),
- additional('prompt', ['update'], [text('Name', 'name'), text('Prompt Text', 'prompt_text'), json('JSON Schema', 'json_schema', '{}'), ...promptFields, bool('Clear Video-Level Configuration', 'clear_video_level'), bool('Clear Selection Filter', 'clear_selection_filter')]),
+ additional('prompt', ['update'], [text('Name', 'name'), text('Prompt Text', 'prompt_text'), json('JSON Schema', 'json_schema', '{}'), ...promptFields, json('Whole-Media Configuration', 'video_level', '{}')]),
  additional('prompt', ['list'], [bool('Active Only', 'active_only', true), bool('Include Defaults', 'include_defaults', true)]),
  options('Prompt Source', 'promptSource', [['saved', 'Saved Prompt'], ['instruction', 'Inline Instruction']], 'saved', { displayOptions: shown('run', ['start']) }),
  id('promptId', shown('run', ['start'], { promptSource: ['saved'] })),
@@ -96,8 +91,7 @@ const props: INodeProperties[] = [
  { ...locator('Browse Index', 'browseIndexId', 'listIndexes', shown('run', ['list'], { listScope: ['video'] })), required: false, description: 'Optional index for the media selector. Leave empty to browse playground media, or enter a media ID directly.' },
  id('videoId', shown('run', ['list'], { listScope: ['video'] })),
  options('Result Level', 'resultLevel', [['segment', 'Segment'], ['video', 'Video']], 'segment', { displayOptions: shown('run', ['results']) }),
- options('View', 'view', [['unfiltered', 'All Extracted Results'], ['filtered', 'Selected Matches'], ['both', 'Both Streams']], 'unfiltered', { displayOptions: shown('run', ['results']), description: 'Selected matches can be unavailable while selection is pending or absent; the full response preserves this distinction' }),
- additional('run', ['results'], [text('Media ID', 'video_id'), text('Filtered Cursor', 'filtered_cursor'), text('Unfiltered Cursor', 'unfiltered_cursor')]),
+ additional('run', ['results'], [text('Media ID', 'video_id'), text('Cursor', 'cursor')]),
  options('Search Scope', 'searchScope', [['index', 'Index'], ['videos', 'Specific Media'], ['runs', 'Specific Runs'], ['playground', 'Playground']], 'index', { displayOptions: shown('search', ['semantic', 'condition']) }),
  id('indexId', shown('search', ['semantic', 'condition'], { searchScope: ['index'] })),
  json('Media IDs', 'videoIds', '[]', { required: true, displayOptions: shown('search', ['semantic', 'condition'], { searchScope: ['videos'] }) }),
@@ -123,7 +117,7 @@ const props: INodeProperties[] = [
  additional('import', ['list'], [text('Status', 'status'), text('Index ID', 'index_id'), bool('Automation Only', 'automation_only')]),
  options('Export Source', 'exportSource', [['run', 'Run'], ['index', 'Index']], 'run', { displayOptions: shown('export', ['create']) }),
  id('runId', shown('export', ['create'], { exportSource: ['run'] })), id('indexId', shown('export', ['create'], { exportSource: ['index'] })),
- additional('export', ['create'], [options('Result Scope', 'result_scope', [['all', 'All Extracted Results'], ['matches', 'Selected Matches']], 'all'), text('Destination Connector ID', 'destination_connector_id'), text('Destination Subpath', 'destination_subpath'), json('Run IDs', 'prompt_run_ids', '[]', { description: 'Only supported for index exports' })]),
+ additional('export', ['create'], [text('Destination Connector ID', 'destination_connector_id'), text('Destination Subpath', 'destination_subpath'), json('Run IDs', 'prompt_run_ids', '[]', { description: 'Only supported for index exports' })]),
  text('Export ID', 'exportId', { required: true, displayOptions: shown('export', ['get', 'download']) }),
  text('Output Binary Field', 'outputBinaryProperty', { default: 'data', required: true, displayOptions: { show: { resource: ['media', 'export'], operation: ['download'] } } }),
 ];
@@ -140,6 +134,6 @@ function additionalPagination(resource: string, operations: string[], extra: Sho
 props.push(number('Limit', 'limit', 50, 200, { displayOptions: shown('run', ['list'], { listScope: ['all', 'video'] }) }));
 props.push(number('Limit', 'limit', 50, 200, { displayOptions: shown('import', ['list']) }));
 props.push(number('Limit', 'limit', 50, 200, { displayOptions: shown('export', ['list']) }));
-props.push(bool('Full Response', 'fullResponse', false, { description: 'Whether to return each complete API response, preserving pagination, readiness, warnings, and selection information. Otherwise list operations return one item per result.', displayOptions: { hide: { operation: ['download', 'upload', 'importUrls', 'create', 'update', 'delete', 'deletionStatus', 'define', 'start', 'estimate', 'get', 'cancel', 'failures', 'retrySegment', 'retryStatus', 'retry', 'agentic', 'sqlGenerate'] } } }));
+props.push(bool('Full Response', 'fullResponse', false, { description: 'Whether to return each complete API response, preserving pagination, readiness, and warnings. Otherwise list operations return one item per result.', displayOptions: { hide: { operation: ['download', 'upload', 'importUrls', 'create', 'update', 'delete', 'deletionStatus', 'define', 'start', 'estimate', 'get', 'cancel', 'failures', 'retrySegment', 'retryStatus', 'retry', 'agentic', 'sqlGenerate'] } } }));
 props.push(text('Idempotency Key', 'idempotencyKey', { description: 'Optional stable business key. Omit to deduplicate native retries automatically. Include a per-item identity when processing multiple input items.', displayOptions: { show: { operation: ['upload', 'importUrls', 'create', 'update', 'delete', 'define', 'start', 'cancel', 'retrySegment', 'retry', 'semantic', 'condition', 'image', 'multimodal', 'sqlGenerate', 'agentic'] } } }));
 export const properties = props;

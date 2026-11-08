@@ -16,15 +16,13 @@
  *   failures: [{method:'POST',path:'/workflow/process',occurrence:2,status:503,
  *               body?:{...},headers?:{...},repeat?:false,afterCommit?:false}]
  *   statusSequence: ['processing','completed'] (last status repeats per run)
- *   selection: 'available' | 'empty' | 'unavailable'
- *   resultPages: {unfiltered: [[row1],[row2],[row3]], filtered: [[row1]]}
+ *   resultPages: [[row1],[row2],[row3]]
  *   searchPages: [[row1],[row2]]
  *   download: {base64, filename, mimeType}
  * Path in failures can be relative to /api/v2 or include /api/v2; query excluded.
  * report.calls.path includes /api/v2; routePath omits it. counts uses routePath.
  * occurrence counts matching requests including failed attempts and replays.
- * Default results deliberately finish the filtered stream before the unfiltered
- * stream so real node execution tests expose accidentally restarted cursors.
+ * Default results span multiple pages to exercise cursor continuation.
  */
 import { createHash, createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -34,7 +32,7 @@ import { pathToFileURL } from 'node:url';
 const row = (id) => ({ video_id: 'video-fixture', segment_id: `segment-${id}`, result: { title: `Fixture ${id}` } });
 const defaults = () => ({
   scenario: 'controlled-responses', failures: [], statusSequence: ['processing', 'completed'],
-  selection: 'available', resultPages: { unfiltered: [[row(1)], [row(2)], [row(3)]], filtered: [[row(1)]] },
+  resultPages: [[row(1)], [row(2)], [row(3)]],
   searchPages: [[{ ...row(1), score: 0.9 }], [{ ...row(2), score: 0.8 }]],
 });
 const importOutputs = (videoId = 'video-fixture', fileName = 'fixture.mp4') => ({ items: [{ file_id: 'file-fixture', file_name: fileName, source_ordinal: 0, part_index: 0, part_count: 1, source_start_seconds: 0, source_end_seconds: 1, video_id: videoId, title: fileName, status: 'completed' }], next_cursor: null, total: 1 });
@@ -213,13 +211,7 @@ export function createFixtureServer(initialConfig = {}) {
       if (path.endsWith('/retry') && method === 'POST') { success({ retry_id: 'retry-fixture', status: 'queued' }); return; }
       if (path.includes('/retries/')) { success({ retry_id: 'retry-fixture', status: 'completed' }); return; }
       if ((match = path.match(/^\/workflow\/runs\/([^/]+)\/results$/))) {
-        const view = url.searchParams.get('view') ?? 'unfiltered';
-        const selectedCount = state.config.selection === 'empty' ? 0 : 1;
-        const result = { run_id: match[1], status: state.config.statusSequence.at(-1), result_level: url.searchParams.get('result_level') ?? 'segment', selection_summary: { status: state.config.selection === 'unavailable' ? 'pending' : 'ready', selected_media_count: selectedCount, selected_video_count: selectedCount, selected_segment_count: selectedCount } };
-        for (const stream of ['filtered', 'unfiltered']) {
-          if (view !== 'both' && view !== stream) continue;
-          result[stream] = stream === 'filtered' && state.config.selection === 'unavailable' ? null : page(stream === 'filtered' && state.config.selection === 'empty' ? [[]] : state.config.resultPages[stream], url.searchParams.get(`${stream}_cursor`), stream);
-        }
+        const result = { run_id: match[1], status: state.config.statusSequence.at(-1), result_level: url.searchParams.get('result_level') ?? 'segment', ...page(state.config.resultPages, url.searchParams.get('cursor'), 'results') };
         success(result); return;
       }
       if (path === '/workflow/search' && method === 'POST' || path === '/workflow/search/page' && method === 'GET') {

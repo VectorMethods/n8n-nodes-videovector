@@ -63,21 +63,17 @@ for (const [status, code, message] of [[401, 'authentication_invalid_api_key', '
   if (status === 429) assert.equal(Number(error.retryAfter ?? error.details?.retryAfter), 2);
  });
 }
-await scenario('Ready zero selected matches returns zero rows', { selection: 'empty' }, workflow('Ready empty selected results', [native({ resource: 'run', operation: 'results', runId: { mode: 'id', value: 'r' }, view: 'filtered', resultLevel: 'segment', returnAll: true })]), (execution) => {
+await scenario('Empty extraction returns zero rows', { resultPages: [[]] }, workflow('Empty extraction', [native({ resource: 'run', operation: 'results', runId: { mode: 'id', value: 'r' }, resultLevel: 'segment', returnAll: true })]), (execution) => {
  assert.equal(execution.status, 'success'); assert.equal(output(execution, 'VideoVector').length, 0);
 });
-await scenario('Ready zero selected matches preserves full response', { selection: 'empty' }, workflow('Ready empty selected response', [native({ resource: 'run', operation: 'results', runId: { mode: 'id', value: 'r' }, view: 'filtered', resultLevel: 'segment', fullResponse: true, returnAll: true })]), (execution) => {
+await scenario('Empty extraction preserves full response', { resultPages: [[]] }, workflow('Empty extraction response', [native({ resource: 'run', operation: 'results', runId: { mode: 'id', value: 'r' }, resultLevel: 'segment', fullResponse: true, returnAll: true })]), (execution) => {
  assert.equal(execution.status, 'success'); const row = output(execution, 'VideoVector')[0]?.json;
- assert.equal(row.selection_summary.status, 'ready'); assert.deepEqual(row.filtered.data, []);
+ assert.deepEqual(row.data, []); assert.equal(row.pagination.has_more, false);
 });
-const pending = { failures: [{ method: 'GET', path: '/workflow/runs/r/results', status: 200, body: { run_id: 'r', status: 'processing', result_level: 'segment', selection_summary: { status: 'pending' }, filtered: null, unfiltered: null } }] };
-await scenario('Processing unfiltered results reports unavailable', pending, workflow('Pending unfiltered rows', [native({ resource: 'run', operation: 'results', runId: { mode: 'id', value: 'r' }, view: 'unfiltered', resultLevel: 'segment' })]), (execution) => {
- assert.equal(execution.status, 'error', 'Pending extraction must not silently terminate downstream workflow with zero items');
- assert.match(execution.data?.resultData?.error?.message, /unavailable|processing|ready/i);
-});
-await scenario('Processing full response preserves readiness', pending, workflow('Pending full response', [native({ resource: 'run', operation: 'results', runId: { mode: 'id', value: 'r' }, view: 'both', resultLevel: 'segment', fullResponse: true })]), (execution) => {
+const pending = { failures: [{ method: 'GET', path: '/workflow/runs/r/results', status: 200, body: { run_id: 'r', status: 'processing', result_level: 'segment', data: [], pagination: { limit: 50, has_more: false, next_cursor: null } } }] };
+await scenario('Processing full response preserves progress', pending, workflow('Pending full response', [native({ resource: 'run', operation: 'results', runId: { mode: 'id', value: 'r' }, resultLevel: 'segment', fullResponse: true })]), (execution) => {
  assert.equal(execution.status, 'success'); const row = output(execution, 'VideoVector')[0]?.json;
- assert.equal(row.status, 'processing'); assert.equal(row.unfiltered, null); assert.equal(row.filtered, null);
+ assert.equal(row.status, 'processing'); assert.deepEqual(row.data, []);
 });
 await scenario('Run cancellation preserves canonical terminal state', {}, workflow('Cancel run', [native({ resource: 'run', operation: 'cancel', runId: { mode: 'id', value: 'r' } })]), (execution) => {
  assert.equal(execution.status, 'success'); const row = output(execution, 'VideoVector')[0]?.json;

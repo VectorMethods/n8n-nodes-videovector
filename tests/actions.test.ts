@@ -44,13 +44,13 @@ describe('Every action uses a canonical backend endpoint', () => {
   ['media', 'get', {}, 'GET', '/videos/video%2Fa'], ['media', 'list', { destination: 'index' }, 'GET', '/indexes/index%2Fa/videos'],
   ['media', 'segments', {}, 'GET', '/videos/video%2Fa/segments'], ['media', 'delete', {}, 'DELETE', '/videos/video%2Fa'], ['media', 'deletionStatus', {}, 'GET', '/videos/video%2Fa/deletion'],
   ['prompt', 'define', { instruction: 'Describe every scene' }, 'POST', '/workflow/define', { instruction: 'Describe every scene' }],
-  ['prompt', 'create', { name: 'Scene extraction', promptText: 'Describe the scene', jsonSchema: { type: 'object' } }, 'POST', '/prompts', { name: 'Scene extraction', prompt_text: 'Describe the scene', json_schema: { type: 'object' } }],
+  ['prompt', 'create', { name: 'Scene extraction', promptText: 'Describe the scene', jsonSchema: { type: 'object' }, videoLevel: { instructions_text: 'Describe whole media', json_schema: { type: 'object' } } }, 'POST', '/prompts', { name: 'Scene extraction', prompt_text: 'Describe the scene', json_schema: { type: 'object' }, video_level: { instructions_text: 'Describe whole media', json_schema: { type: 'object' } } }],
   ['prompt', 'get', {}, 'GET', '/prompts/prompt%2Fa'], ['prompt', 'list', {}, 'GET', '/prompts'],
   ['prompt', 'update', { additionalFields: { description: 'Changed' } }, 'PUT', '/prompts/prompt%2Fa', { description: 'Changed' }], ['prompt', 'delete', {}, 'DELETE', '/prompts/prompt%2Fa'],
   ['run', 'start', { target: 'index', promptSource: 'saved' }, 'POST', '/workflow/process', { prompt_id: 'prompt/a', index_id: 'index/a' }],
   ['run', 'estimate', { target: 'videos', videoIds: '["v1","v2"]' }, 'POST', '/prompt-runs/estimate', { prompt_id: 'prompt/a', target: { type: 'videos', video_ids: ['v1', 'v2'] } }],
   ['run', 'get', {}, 'GET', '/prompt-runs/run%2Fa'], ['run', 'list', { listScope: 'all' }, 'GET', '/prompt-runs'],
-  ['run', 'results', { view: 'unfiltered', fullResponse: true }, 'GET', '/workflow/runs/run%2Fa/results'],
+  ['run', 'results', { fullResponse: true }, 'GET', '/workflow/runs/run%2Fa/results'],
   ['run', 'cancel', {}, 'POST', '/prompt-runs/run%2Fa/cancel'], ['run', 'failures', {}, 'GET', '/prompt-runs/run%2Fa/failed-segments'],
   ['run', 'retrySegment', {}, 'POST', '/prompt-runs/run%2Fa/videos/video%2Fa/segments/segment%2Fa/retry'],
   ['run', 'retryStatus', {}, 'GET', '/prompt-runs/run%2Fa/videos/video%2Fa/segments/segment%2Fa/retries/retry%2Fa'],
@@ -68,7 +68,7 @@ describe('Every action uses a canonical backend endpoint', () => {
   ['export', 'create', { exportSource: 'index' }, 'POST', '/exports/index/index%2Fa', {}], ['export', 'get', {}, 'GET', '/exports/export%2Fa'], ['export', 'list', {}, 'GET', '/exports'],
  ];
  it.each(cases)('%s.%s', async (resource, operation, params, method, path, body) => {
-  api.mockResolvedValue({ ...page([]), items: [], next_cursor: null, total: 0, prompts: [], tables: [], unfiltered: page([]) });
+  api.mockResolvedValue({ ...page([]), items: [], next_cursor: null, total: 0, prompts: [], tables: [] });
   const ctx = context({ resource, operation, indexId: id('index/a'), promptId: id('prompt/a'), videoId: id('video/a'), runId: id('run/a'), connectorId: id('connector/a'), segmentId: 'segment/a', retryId: 'retry/a', jobId: 'job/a', exportId: 'export/a', ...params });
   await executeOperation(ctx, 0);
   expect(api.mock.calls[0].slice(0, 2)).toEqual([method, path]);
@@ -99,8 +99,8 @@ describe('Execution behavior', () => {
   expect(api.mock.calls[0][2]).toEqual({ prompt_instruction: 'Describe the video' });
  });
  it('sends explicit false processing settings and schema JSON unchanged', async () => {
-  await executeOperation(context({ resource: 'run', operation: 'start', promptId: id('p'), target: 'videos', videoIds: ['v'], additionalFields: { enable_transcription: false, enable_image_embedding: false } }), 0);
-  expect(api.mock.calls[0][2]).toEqual({ prompt_id: 'p', video_ids: ['v'], enable_transcription: false, enable_image_embedding: false });
+  await executeOperation(context({ resource: 'run', operation: 'start', promptId: id('p'), target: 'videos', videoIds: ['v'], additionalFields: { enable_image_embedding: false } }), 0);
+  expect(api.mock.calls[0][2]).toEqual({ prompt_id: 'p', video_ids: ['v'], enable_image_embedding: false });
  });
  it.each(['start', 'estimate'])('keeps indexed-media membership when %s targets specific media', async (operation) => {
   await executeOperation(context({ resource: 'run', operation, promptId: id('p'), target: 'videos', mediaScope: 'index', indexId: id('library'), videoIds: '["v1","v2"]' }), 0);
@@ -155,22 +155,29 @@ describe('Execution behavior', () => {
  });
 });
 
-describe('Pagination and selection', () => {
- it('uses independent run-result cursors and never replays an exhausted stream', async () => {
-  api.mockResolvedValueOnce({ run_id: 'r', filtered: page([{ segment_id: 'f1' }], 'filtered-next'), unfiltered: page([{ segment_id: 'u1' }]), selection_summary: { status: 'completed' } }).mockResolvedValueOnce({ run_id: 'r', filtered: page([{ segment_id: 'f2' }]), unfiltered: null });
-  const output = await executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), view: 'both', returnAll: true }), 0);
-  expect(api.mock.calls[1][3]).toEqual({ result_level: 'segment', view: 'filtered', limit: 50, filtered_cursor: 'filtered-next' });
-  expect(output.map((row) => row.json.segment_id)).toEqual(['f1', 'u1', 'f2']);
+describe('Extraction pagination', () => {
+ it('follows one extraction cursor without replaying completed pages', async () => {
+  api.mockResolvedValueOnce({ run_id: 'r', status: 'completed', result_level: 'segment', ...page([{ segment_id: 's1' }], 'next') })
+   .mockResolvedValueOnce({ run_id: 'r', status: 'completed', result_level: 'segment', ...page([{ segment_id: 's2' }]) });
+  const output = await executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), returnAll: true }), 0);
+  expect(api.mock.calls[1][3]).toEqual({ result_level: 'segment', limit: 50, cursor: 'next' });
+  expect(output.map((row) => row.json.segment_id)).toEqual(['s1', 's2']);
  });
- it('does not silently treat unavailable selection as zero matches', async () => {
-  api.mockResolvedValue({ run_id: 'r', filtered: null, selection_summary: { status: 'pending' } });
-  await expect(executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), view: 'filtered' }), 0)).rejects.toThrow('Selected results are unavailable');
-  const full = await executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), view: 'filtered', fullResponse: true }), 0);
-  expect(full[0].json).toMatchObject({ filtered: null, selection_summary: { status: 'pending' } });
+ it('preserves the requested result scope and explicit cursor', async () => {
+  api.mockResolvedValue({ run_id: 'r', status: 'completed', result_level: 'video', ...page([{ video_id: 'v', metadata: { summary: 'Whole media' } }]) });
+  const full = await executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), resultLevel: 'video', fullResponse: true, additionalFields: { video_id: 'v', cursor: 'saved' } }), 0);
+  expect(api.mock.calls[0][3]).toEqual({ result_level: 'video', limit: 50, video_id: 'v', cursor: 'saved' });
+  expect(full[0].json).toMatchObject({ result_level: 'video', data: [{ video_id: 'v' }] });
  });
- it('returns no items for a valid zero-match result', async () => {
-  api.mockResolvedValue({ run_id: 'r', filtered: page([]), selection_summary: { status: 'completed' } });
-  expect(await executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), view: 'filtered' }), 0)).toEqual([]);
+ it('returns no rows for a valid empty extraction page', async () => {
+  api.mockResolvedValue({ run_id: 'r', status: 'completed', ...page([]) });
+  expect(await executeOperation(context({ resource: 'run', operation: 'results', runId: id('r') }), 0)).toEqual([]);
+ });
+ it('exposes both prompt scopes and only supported execution settings', () => {
+  expect(properties.find(property => property.name === 'videoLevel')?.required).toBe(true);
+  const execution = properties.find(property => property.name === 'additionalFields' && property.displayOptions?.show?.resource?.includes('run') && property.displayOptions?.show?.operation?.includes('start'));
+  expect(execution?.options?.map(option => option.name)).toEqual(['processing_model', 'enable_image_embedding']);
+  expect(JSON.stringify(properties)).not.toMatch(/selection_filter|clear_video_level|filtered_cursor|unfiltered_cursor/);
  });
  it('preserves complete search snapshot warnings and window limits', async () => {
   api.mockResolvedValueOnce({ ...page([{ segment_id: 's1' }], 'next'), warnings: ['Result window limited'], pagination: { ...page([], 'next').pagination, truncated: true, result_window: 200 } }).mockResolvedValueOnce({ ...page([{ segment_id: 's2' }]), warnings: ['Result window limited'] });
@@ -243,15 +250,10 @@ describe('Batched discovery regressions', () => {
   const keyField = properties.find((property) => property.name === 'idempotencyKey');
   expect(keyField?.displayOptions?.show?.operation).toContain(operation);
  });
- it.each(['unfiltered', 'both'])('reports pending extraction for %s row output', async (view) => {
-  api.mockResolvedValue({ run_id: 'r', status: 'processing', filtered: null, unfiltered: null, selection_summary: { status: 'pending' } });
-  await expect(executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), view }), 0)).rejects.toThrow('Extraction results are unavailable');
-  const full = await executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), view, fullResponse: true }), 0);
-  expect(full[0].json).toMatchObject({ status: 'processing', unfiltered: null });
- });
- it('preserves legitimate empty unfiltered results after completion', async () => {
-  api.mockResolvedValue({ run_id: 'r', status: 'completed', unfiltered: page([]) });
-  expect(await executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), view: 'unfiltered' }), 0)).toEqual([]);
+ it('preserves progress on a full extraction page while work continues', async () => {
+  api.mockResolvedValue({ run_id: 'r', status: 'processing', ...page([]) });
+  const full = await executeOperation(context({ resource: 'run', operation: 'results', runId: id('r'), fullResponse: true }), 0);
+  expect(full[0].json).toMatchObject({ status: 'processing', data: [] });
  });
  it('allows clearing a saved prompt description without sending blank unrelated fields', async () => {
   await executeOperation(context({ resource: 'prompt', operation: 'update', promptId: id('p'), additionalFields: { description: '', name: '' } }), 0);

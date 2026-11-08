@@ -42,7 +42,7 @@ server's result snapshot. It does not expand a search beyond the server's
 result window or turn a limited list endpoint into an exhaustive listing.
 **Full Response** preserves each response page, pagination, coverage, and
 warnings so workflows can inspect truncation and selection readiness.
-Run results support segment/video level and filtered/unfiltered/both views.
+Run results expose segment or whole-media fields through one extraction page and cursor. Every execution produces both scopes; use the Search resource or downstream n8n nodes to filter them.
 Partial completion and failure details remain visible in status responses.
 For **Run → Start** or **Estimate** with **Specific Media**, select its
 **Media Location**: Playground, or Index with the containing index ID.
@@ -134,8 +134,8 @@ not saved. Successfully published triggers retain their registration on restart.
 For HTTP Request, create a **Header Auth** credential with header name
 `X-API-Key`; assign it to each VideoVector HTTP node. Send JSON to the same
 public API and an `Idempotency-Key` on submissions. Use native Wait/If nodes as
-shown by the HTTP template. Follow each filtered/unfiltered result cursor
-independently when retrieving both views.
+shown by the HTTP template. Follow `pagination.next_cursor` using `cursor`
+until `pagination.has_more` is false.
 In the HTTP template's **Configure** node, leave `indexId` empty for Playground
 media or set the existing media's index ID. The template retains `videoId` so
 processing stays limited to that selected media.
@@ -206,19 +206,21 @@ replace `download_url`, and use a new idempotency key for the changed request.
 There is no automatic retry of expired download links. Cancelling a failed
 attachment job discards retained unfinished files without deleting imported media.
 
-## Standalone parts and grounded extraction
+## Whole-media and segment extraction
 
-Uploads return durable import jobs. Long videos become the minimum number of
-balanced standalone parts, each at most 40 minutes. Each part has its own media
-ID, local timestamps, segments and optional whole-media output. Job phase and
-source-file counters are separate from `parts_total`, `parts_completed`, and
-`parts_failed`. Read every ordered outputs page (`next_cursor` until null).
+Uploads return durable import jobs and retain the original media identity.
+Long videos use internal analysis parts of at most 40 minutes. Every extraction
+contains segment and whole-media fields accepted together for that source, with
+segment timestamps on the original timeline. Different media items can complete
+independently; media assets and image indexing can finish later. Import job phase
+and source-file counters are separate from extraction part counters. Read every ordered outputs page (`next_cursor` until null).
 `video_ids` includes only the current page. Use `import_job_id` with processing
 to select the complete completed import, exclusive with `video_ids`.
 
-The optional `video_level` configuration contains only `instructions_text` and
-`json_schema`. It requires content-aware segmentation. Segment and whole-media
-fields are returned in the same media call, grounded directly in the supplied
-part; there is no later segment-text synthesis or cross-part summary.
+Prompts require `video_level` with `instructions_text` and `json_schema` as well
+as their segment schema. Both scopes are grounded in the same media call,
+including images. Audio/video boundaries are content-aware. Processing only
+extracts information; search conditions and downstream n8n nodes can filter it.
+Execution overrides are `processing_model` and `enable_image_embedding`.
 
-Use Import → Get Source Files with Failed Only and Return All to inspect every failed source and its refresh requirement before retrying; source-file pagination is separate from the ordered imported-parts manifest.
+Use Import → Get Source Files with Failed Only and Return All to inspect every failed source and its refresh requirement before retrying; source-file pagination is separate from the ordered imported-media manifest.

@@ -64,7 +64,12 @@ for (const file of files) {
     assert(workflow.nodes.some((node) => node.type === '@n8n/n8n-nodes-langchain.mcpClientTool'));
     assert(workflow.nodes.some((node) => node.type === '@n8n/n8n-nodes-langchain.lmChatOpenAi'), `${file}: agent template retains its explicit model connection`);
     const instructions = workflow.nodes.find((node) => node.type === '@n8n/n8n-nodes-langchain.agent').parameters.options.systemMessage;
-    for (const name of ['analyze', 'get_analysis', 'search', 'import_media', 'save_prompt', 'browse']) assert(instructions.includes(name), `${file}: current tool guidance missing ${name}`);
+    for (const name of ['analyze', 'get_analysis', 'search', 'import_media', 'browse']) assert(instructions.includes(name), `${file}: current tool guidance missing ${name}`);
+    assert(!instructions.includes('save_prompt'), `${file}: retired prompt tool must not be advertised`);
+    assert(instructions.includes('scope.prompt_id'), `${file}: generated prompt reuse keeps the returned scope identity`);
+    assert(instructions.includes('get_analysis and answer in context'), `${file}: ordinary questions should use extracted content`);
+    assert(instructions.includes('search only for large, already-processed collections'), `${file}: search is reserved for collections beyond context`);
+    assert(instructions.includes('without extraction'), `${file}: imports transfer media without extraction`);
     assert(instructions.includes('search_id and an optional cursor'), `${file}: saved searches require their original identity`);
     assert(instructions.includes('Continue until terminal status or required user input, subject to user interruption and host limits'), `${file}: agent must own the task lifecycle within host limits`);
     assert(instructions.includes('Never ask the user to poll'), `${file}: agent must handle polling`);

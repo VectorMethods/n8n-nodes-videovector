@@ -67,18 +67,11 @@ await scenario('Continue on error retains item pairing', {
   assert.match(items[1].json.error, /scope/i);
 });
 
-await scenario('Filtered and unfiltered pagination stay independent', {
-  resultPages: { filtered: [[{ segment_id: 'f1' }]], unfiltered: [[{ segment_id: 'u1' }], [{ segment_id: 'u2' }]] },
-}, () => [native(parameters('run', 'results', { runId: { mode: 'id', value: 'run-1' }, view: 'both', resultLevel: 'segment', returnAll: true, limit: 50 }))], async (execution) => {
+await scenario('Extraction pagination follows one cursor', {
+  resultPages: [[{ segment_id: 's1' }], [{ segment_id: 's2' }]],
+}, () => [native(parameters('run', 'results', { runId: { mode: 'id', value: 'run-1' }, resultLevel: 'segment', returnAll: true, limit: 50 }))], async (execution) => {
   assert.equal(execution.status, 'success');
-  assert.deepEqual(output(execution, 'VideoVector').map((item) => item.json.segment_id), ['f1', 'u1', 'u2']);
-});
-
-await scenario('Unavailable selected results are explicit', { selection: 'unavailable' }, () => [
-  native(parameters('run', 'results', { runId: { mode: 'id', value: 'run-1' }, view: 'filtered', resultLevel: 'segment', returnAll: false, limit: 50 })),
-], async (execution) => {
-  assert.equal(execution.status, 'error');
-  assert.match(execution.data.resultData.error.message, /unavailable/i);
+  assert.deepEqual(output(execution, 'VideoVector').map((item) => item.json.segment_id), ['s1', 's2']);
 });
 
 await scenario('Search continuation does not repeat billed search', {

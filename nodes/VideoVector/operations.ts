@@ -17,7 +17,7 @@ function jsonValue(value: unknown, label: string): unknown {
 }
 function cleanFields(value: unknown, preserveEmptyDescription: boolean): IDataObject {
  const result: IDataObject = {};
- const jsonFields = new Set(['json_schema', 'video_level', 'semantic_indexing', 'execution_config', 'selection_filter', 'run_ids', 'index_ids', 'search_fields', 'prompt_run_ids', 'filters', 'files']);
+ const jsonFields = new Set(['json_schema', 'video_level', 'semantic_indexing', 'execution_config', 'run_ids', 'index_ids', 'search_fields', 'prompt_run_ids', 'filters', 'files']);
  for (const [key, raw] of Object.entries(record(value))) {
   if (raw === undefined || (raw === '' && !(preserveEmptyDescription && key === 'description'))) continue;
   result[key] = (jsonFields.has(key) ? jsonValue(raw, key) : raw) as IDataObject[string];
@@ -95,45 +95,25 @@ export async function paginate(
  return output;
 }
 
-/** A finished stream is excluded from later requests so it cannot restart at page one. */
+/** Extraction results use one cursor for the requested result scope. */
 export async function runResults(ctx: IExecuteFunctions, index: number, full: boolean, fields: IDataObject): Promise<INodeExecutionData[]> {
- const selected = parameter(ctx, index, 'view', 'unfiltered');
  const all = ctx.getNodeParameter('returnAll', index, false) as boolean;
- let pending = selected === 'both' ? ['filtered', 'unfiltered'] : [selected];
- const cursors: Record<string, string> = {};
- for (const stream of pending) if (fields[`${stream}_cursor`]) cursors[stream] = String(fields[`${stream}_cursor`]);
- const seen: Record<string, Set<string>> = { filtered: new Set(), unfiltered: new Set() };
+ let cursor = fields.cursor ? String(fields.cursor) : undefined;
+ const seen = new Set<string>();
  const output: INodeExecutionData[] = [];
- while (pending.length) {
+ do {
   const query: IDataObject = {
    result_level: parameter(ctx, index, 'resultLevel', 'segment'),
-   view: pending.length === 2 ? 'both' : pending[0],
    limit: all ? 50 : ctx.getNodeParameter('limit', index, 50) as number,
+   ...(fields.video_id ? { video_id: fields.video_id } : {}),
+   ...(cursor ? { cursor } : {}),
   };
-  if (fields.video_id) query.video_id = fields.video_id;
-  for (const stream of pending) if (cursors[stream]) query[`${stream}_cursor`] = cursors[stream];
   const response = record(await apiRequest.call(ctx, 'GET', `/workflow/runs/${encoded(parameter(ctx, index, 'runId'))}/results`, undefined, query));
-  if (full) output.push(item(response, index));
-  const next: string[] = [];
-  for (const stream of pending) {
-   const page = response[stream];
-   if (page == null) {
-    if (!full && stream === 'unfiltered') throw new NodeOperationError(ctx.getNode(), 'Extraction results are unavailable', { itemIndex: index, description: `Run ${String(response.run_id)} is ${String(response.status)}. Wait for a terminal run status, or enable Full Response to inspect readiness.` });
-    if (!full && selected === 'filtered') throw new NodeOperationError(ctx.getNode(), 'Selected results are unavailable', { itemIndex: index, description: 'Selection may be pending, failed, or absent. Enable Full Response to inspect selection_summary, or select All Extracted Results.' });
-    continue;
-   }
-   const parsed = record(page);
-   if (!full) output.push(...rows(parsed.data).map((row) => item({ ...row, _videovector: { run_id: response.run_id, status: response.status, result_level: response.result_level, view: stream, selection_summary: response.selection_summary } }, index)));
-   const cursor = all ? nextCursor(parsed) : undefined;
-   if (cursor) {
-    if (seen[stream].has(cursor)) throw new Error(`The API repeated the ${stream} pagination cursor`);
-    seen[stream].add(cursor);
-    cursors[stream] = cursor;
-    next.push(stream);
-   }
-  }
-  pending = next;
- }
+  output.push(...emit(response, index, full, 'data'));
+  cursor = all ? nextCursor(response) : undefined;
+  if (cursor && seen.has(cursor)) throw new Error('The API repeated a pagination cursor');
+  if (cursor) seen.add(cursor);
+ } while (cursor);
  return output;
 }
 
@@ -172,7 +152,7 @@ export async function executeOperation(ctx: IExecuteFunctions, index: number): P
  }
  if (resource === 'prompt') {
   if (operation === 'define') response = await post('/workflow/define', { instruction: parameter(ctx, index, 'instruction'), ...fields });
-  else if (operation === 'create') response = await post('/prompts', { name: parameter(ctx, index, 'name'), prompt_text: parameter(ctx, index, 'promptText'), json_schema: record(jsonValue(ctx.getNodeParameter('jsonSchema', index), 'JSON Schema')) as IDataObject, ...fields });
+  else if (operation === 'create') response = await post('/prompts', { name: parameter(ctx, index, 'name'), prompt_text: parameter(ctx, index, 'promptText'), json_schema: record(jsonValue(ctx.getNodeParameter('jsonSchema', index), 'JSON Schema')) as IDataObject, video_level: record(jsonValue(ctx.getNodeParameter('videoLevel', index), 'Whole-Media Configuration')) as IDataObject, ...fields });
   else if (operation === 'update') response = await apiRequest.call(ctx, 'PUT', `/prompts/${pathId('promptId')}`, fields, undefined, key());
   else if (operation === 'delete') response = await apiRequest.call(ctx, 'DELETE', `/prompts/${pathId('promptId')}`, undefined, undefined, key());
   else if (operation === 'get') response = await get(`/prompts/${pathId('promptId')}`);
